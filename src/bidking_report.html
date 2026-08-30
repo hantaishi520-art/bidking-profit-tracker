@@ -1,0 +1,4031 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BidKing JSON Report</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1ea;
+      --grid-strong: rgba(31,118,103,.08);
+      --grid-soft: rgba(31,118,103,.07);
+      --panel: #fffdf8;
+      --panel-translucent: rgba(255,253,248,.78);
+      --ink: #1b2430;
+      --muted: #69717d;
+      --line: #d8d0c2;
+      --table-head: #ede6d8;
+      --table-head-ink: #4a3d2c;
+      --table-line: #ece5d8;
+      --accent: #1f7667;
+      --accent-2: #a55b2a;
+      --value-line: #2563eb;
+      --value-line-2: #f59e0b;
+      --button-bg: #252f3d;
+      --button-ink: #ffffff;
+      --button-secondary-bg: #fffdf8;
+      --good-bg: #e6f4ed;
+      --good: #116248;
+      --bad-bg: #f7e8e2;
+      --bad: #a33d2a;
+      --warn-bg: #f8efd1;
+      --warn-ink: #6d5120;
+      --mini-bg: #edf7f3;
+      --mini-hover: #e1f2ec;
+      --shadow: 0 16px 40px rgba(52, 42, 28, 0.10);
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0c1118;
+      --grid-strong: rgba(226,185,59,.08);
+      --grid-soft: rgba(31,118,103,.10);
+      --panel: #121a25;
+      --panel-translucent: rgba(18,26,37,.82);
+      --ink: #e8eef6;
+      --muted: #91a0b3;
+      --line: #263344;
+      --table-head: #182231;
+      --table-head-ink: #d6e1ef;
+      --table-line: #263344;
+      --accent: #40b99f;
+      --accent-2: #e2b93b;
+      --value-line: #60a5fa;
+      --value-line-2: #fbbf24;
+      --button-bg: #e2b93b;
+      --button-ink: #111722;
+      --button-secondary-bg: #111923;
+      --good-bg: rgba(39,255,154,.15);
+      --good: #27ff9a;
+      --bad-bg: rgba(255,91,97,.15);
+      --bad: #ff5b61;
+      --warn-bg: #261f12;
+      --warn-ink: #f1d083;
+      --mini-bg: #16291f;
+      --mini-hover: #1c3428;
+      --shadow: 0 18px 44px rgba(0,0,0,.28);
+    }
+    html[data-profit-colors="normal"] {
+      --profit-good: var(--good);
+      --profit-bad: var(--bad);
+      --profit-good-bg: var(--good-bg);
+      --profit-bad-bg: var(--bad-bg);
+    }
+    html[data-profit-colors="inverted"] {
+      --profit-good: var(--bad);
+      --profit-bad: var(--good);
+      --profit-good-bg: var(--bad-bg);
+      --profit-bad-bg: var(--good-bg);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        linear-gradient(90deg, var(--grid-strong) 1px, transparent 1px),
+        linear-gradient(180deg, var(--grid-soft) 1px, transparent 1px),
+        var(--bg);
+      background-size: 34px 34px;
+      color: var(--ink);
+      letter-spacing: 0;
+    }
+
+    .app { max-width: 1360px; margin: 0 auto; padding: 28px; }
+    .topbar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    h1 { margin: 0; font-size: 30px; font-weight: 800; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
+    .meta { text-align: right; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+    .drop {
+      border: 1px dashed #8e826e;
+      background: var(--panel-translucent);
+      border-radius: 8px;
+      min-height: 96px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      transition: border-color .15s, transform .15s, background .15s;
+    }
+    .drop.drag { border-color: var(--accent); background: #f2fbf7; transform: translateY(-1px); }
+    .drop strong { display: block; font-size: 16px; }
+    .drop span { color: var(--muted); font-size: 13px; }
+    .lan-access {
+      display: none;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .lan-access code {
+      color: var(--accent);
+      font-weight: 800;
+      word-break: break-all;
+    }
+    .copy-link-btn {
+      margin-left: 8px;
+      min-height: 26px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--button-secondary-bg);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 3px 8px;
+    }
+    .btn {
+      border: 1px solid #b9aa95;
+      background: var(--button-bg);
+      color: var(--button-ink);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn.secondary {
+      background: var(--button-secondary-bg);
+      color: var(--ink);
+    }
+    .btn:disabled {
+      cursor: wait;
+      opacity: .68;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .status {
+      color: var(--muted);
+      font-size: 12px;
+      min-height: 18px;
+    }
+    .auto-refresh {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+    }
+    .auto-refresh input {
+      accent-color: var(--accent);
+    }
+    .auto-refresh-status {
+      color: var(--muted);
+      font-size: 12px;
+      min-height: 18px;
+      min-width: 92px;
+    }
+    .uid-panel {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .uid-panel label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .uid-input,
+    .uid-select {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--ink);
+      padding: 7px 9px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .uid-input { width: min(240px, 100%); }
+    .uid-select { min-width: 190px; max-width: 300px; }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+    .chart-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 0 0 18px;
+      box-shadow: var(--shadow);
+    }
+    .chart-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+    .chart-title {
+      font-size: 15px;
+      font-weight: 900;
+      color: var(--ink);
+    }
+    .chart-note {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .inv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 10px;
+    }
+    .inv-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 13px;
+      background: linear-gradient(135deg, rgba(31,118,103,.12), rgba(31,118,103,.02));
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+    .inv-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+      box-shadow: 0 6px 18px rgba(0,0,0,.10);
+    }
+    .inv-meta { display: flex; flex-direction: column; min-width: 0; }
+    .inv-name {
+      font-size: 13px; font-weight: 700; color: var(--ink);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
+    }
+    .inv-tier { font-size: 11px; color: var(--muted); margin-top: 3px; font-weight: 700; }
+    .inv-tier[data-q="3"] { color: #1f7667; }
+    .inv-tier[data-q="4"] { color: #2563eb; }
+    .inv-tier[data-q="5"] { color: #b45309; }
+    .inv-tier[data-q="6"] { color: #9333ea; }
+    .inv-count {
+      font-size: 21px; font-weight: 800; color: var(--accent);
+      font-variant-numeric: tabular-nums; flex: 0 0 auto; line-height: 1;
+    }
+    .inv-count small { font-size: 11px; color: var(--muted); font-weight: 700; margin-left: 3px; }
+    .inv-empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+    /* 低库存（数量≤10）提醒样式 */
+    .inv-card.inv-low {
+      background: linear-gradient(135deg, rgba(185,52,52,.16), rgba(185,52,52,.03));
+      border-color: rgba(185,52,52,.45);
+    }
+    .inv-card.inv-low:hover { border-color: #b93434; box-shadow: 0 6px 18px rgba(185,52,52,.18); }
+    .inv-count.inv-low { color: #b93434; }
+    .inv-badge-low {
+      font-size: 10px; color: #fff; background: #b93434;
+      border-radius: 6px; padding: 1px 5px; margin-left: 6px; vertical-align: middle;
+    }
+    @media (max-width: 560px) {
+      .inv-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    }
+    .trend-canvas {
+      display: block;
+      width: 100%;
+      height: 210px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .card.actionable { cursor: pointer; transition: border-color .15s, transform .15s; }
+    .card.actionable:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .label { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+    .value { font-size: 26px; font-weight: 800; margin-top: 7px; }
+    .value.good { color: var(--profit-good); }
+    .value.bad { color: var(--profit-bad); }
+    .delta {
+      min-height: 18px;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .delta.good { color: var(--profit-good); }
+    .delta.bad { color: var(--profit-bad); }
+    .mini-action {
+      margin-top: 10px;
+      min-height: 28px;
+      border: 1px solid rgba(31, 118, 103, .32);
+      border-radius: 6px;
+      background: var(--mini-bg);
+      color: var(--accent);
+      font-weight: 800;
+      cursor: pointer;
+      padding: 5px 10px;
+      width: 100%;
+    }
+    .mini-action:hover { border-color: var(--accent); background: var(--mini-hover); }
+    .rate-toggle {
+      cursor: pointer;
+      opacity: 0.55;
+      font-size: 0.85em;
+      transition: opacity .2s, color .2s;
+      user-select: none;
+    }
+    .rate-toggle:hover { opacity: 1; color: var(--accent); }
+    .rate-toggle.active { opacity: 1; color: var(--accent); }
+    .theme-toggle {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      border-radius: 6px;
+      min-height: 34px;
+      padding: 7px 12px;
+      cursor: pointer;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .seg, .chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .tool-btn, .chip {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      border-radius: 6px;
+      min-height: 34px;
+      padding: 7px 11px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .tool-btn.active { background: #1f7667; color: white; border-color: #1f7667; }
+    .chip {
+      min-height: 28px;
+      padding: 5px 10px;
+      font-size: 12px;
+      opacity: .45;
+      transition: opacity .15s, border-color .15s, color .15s;
+    }
+    .chip.active {
+      opacity: 1;
+      background: #e2b93b;
+      color: #090d14;
+      border-color: #e2b93b;
+    }
+    .chip:hover {
+      opacity: 1;
+      border-color: #8e826e;
+    }
+    .limit {
+      width: 82px;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 9px;
+      background: var(--panel);
+      font-weight: 700;
+    }
+    .time-input {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 9px;
+      background: var(--panel);
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .table-wrap {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: auto;
+      box-shadow: var(--shadow);
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 1240px; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--table-line); text-align: right; font-size: 13px; }
+    th { position: sticky; top: 0; background: var(--table-head); color: var(--table-head-ink); z-index: 1; }
+    th:first-child, td:first-child, th:nth-child(3), td:nth-child(3), th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5), th:nth-child(6), td:nth-child(6) { text-align: left; }
+    tbody tr.win-positive { background: var(--profit-good-bg); }
+    tbody tr.win-negative { background: var(--profit-bad-bg); }
+    .log-drop-zone {
+      border: 1px dashed #8e826e;
+      background: var(--panel-translucent);
+      border-radius: 8px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 10px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      flex-wrap: wrap;
+    }
+    .log-drop-zone.drag { border-color: var(--accent); background: rgba(31,118,103,.06); }
+    .log-drop-zone.loaded { border-color: var(--accent); }
+    .log-drop-zone-text { font-size: 13px; color: var(--muted); flex: 1; min-width: 0; }
+    .log-drop-zone-text strong { display: block; color: var(--ink); font-size: 14px; margin-bottom: 2px; }
+    .log-choose-btn { font-size: 12px; padding: 6px 12px; }
+
+    /* ===== 控制面板：公网访问 ===== */
+    .ctrl-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .ctrl-row {
+      border: 1px solid var(--line);
+      background: var(--panel-translucent);
+      border-radius: 8px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .ctrl-row-label {
+      font-size: 14px;
+      font-weight: 700;
+      flex: 0 0 auto;
+      min-width: 110px;
+    }
+    .ctrl-row-body {
+      flex: 1;
+      min-width: 0;
+      font-size: 13px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--button-secondary-bg);
+      color: var(--ink);
+      transition: background .15s, border-color .15s, color .15s;
+      white-space: nowrap;
+    }
+    .toggle-btn.on {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    html[data-theme="dark"] .toggle-btn.on { color: #111722; }
+    .toggle-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: .5;
+      flex-shrink: 0;
+    }
+    .toggle-btn.on .toggle-dot { opacity: 1; }
+    .ngrok-warning {
+      font-size: 11px;
+      color: var(--bad);
+      opacity: .85;
+      margin-left: 8px;
+    }
+    .ngrok-url-box {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .ngrok-url-box.visible { display: flex; }
+    .ngrok-url-code {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--accent);
+      word-break: break-all;
+    }
+    .ngrok-status {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+    .ngrok-status.err { color: var(--bad); }
+    .ngrok-status.ok  { color: var(--good); }
+    /* token 区域 */
+    .ngrok-token-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      width: 100%;
+      margin-top: 6px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+    .ngrok-token-label {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .ngrok-token-input {
+      flex: 1;
+      min-width: 180px;
+      max-width: 420px;
+      font-size: 12px;
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--ink);
+      font-family: monospace;
+    }
+    .ngrok-token-input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .ngrok-token-saved {
+      font-size: 12px;
+      color: var(--good);
+    }
+    .ngrok-token-saved.none { color: var(--muted); }
+    .ngrok-save-btn {
+      font-size: 12px;
+      padding: 5px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--button-secondary-bg);
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .ngrok-save-btn:disabled { opacity: .6; cursor: wait; }
+    /* ===== end ctrl-panel ===== */
+    .profit-pos { color: var(--profit-good); font-weight: 800; }
+    .profit-neg { color: var(--profit-bad); font-weight: 800; }
+    .items { color: #4f5b68; max-width: 310px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .won-items {
+      max-width: 340px;
+      white-space: normal;
+      text-align: left;
+    }
+    .won-summary {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .won-toggle {
+      min-height: 26px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--button-secondary-bg);
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 800;
+      padding: 3px 8px;
+    }
+    .won-item-list { margin-top: 7px; }
+    .won-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin: 2px 4px 2px 0;
+      padding: 3px 7px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--button-secondary-bg);
+      color: var(--ink);
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .won-item-value { color: var(--accent); }
+    .won-item-quality { color: var(--muted); font-weight: 700; }
+    .empty, .error {
+      margin: 14px 0;
+      padding: 14px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--warn-bg);
+      color: var(--warn-ink);
+      display: none;
+    }
+    .save-warning {
+      display: none;
+      margin: 14px 0;
+      padding: 14px 16px;
+      border-radius: 8px;
+      border: 1px solid #e2b93b;
+      background: var(--warn-bg);
+      color: var(--warn-ink);
+      box-shadow: var(--shadow);
+    }
+    .save-warning.open { display: block; }
+    .save-warning-title {
+      font-weight: 900;
+      margin-bottom: 6px;
+    }
+    .save-warning-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .save-warning-actions .btn {
+      min-height: 34px;
+      padding: 7px 11px;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(9, 13, 20, .58);
+      z-index: 20;
+    }
+    .modal-backdrop.open { display: flex; }
+    .profit-modal {
+      width: min(402px, 100%);
+      max-height: calc(100vh - 36px);
+      background: #101722;
+      color: #d8e5f1;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px;
+      box-shadow: 0 24px 64px rgba(0,0,0,.34);
+      padding: 28px 34px 24px;
+      overflow: auto;
+    }
+    .high-value-modal {
+      width: min(860px, calc(100vw - 36px));
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .profit-modal h2 {
+      margin: 0 0 18px;
+      text-align: center;
+      color: #ffbf2f;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+    .detail-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      min-height: 36px;
+      border-bottom: 1px solid rgba(148, 163, 184, .11);
+      font-size: 15px;
+    }
+    .detail-row:last-of-type { border-bottom: 0; }
+    .detail-label { color: #b8cdeb; }
+    .detail-value { font-weight: 800; color: #e8f1fa; white-space: nowrap; }
+    .detail-value.income { color: #27ff9a; }
+    .detail-value.expense { color: #ff5b61; }
+    .detail-sub {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 2px 0 9px 14px;
+      color: #718197;
+      font-size: 13px;
+    }
+    .detail-total {
+      margin-top: 10px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 191, 47, .22);
+      font-size: 18px;
+      font-weight: 900;
+    }
+    .detail-total .detail-label { color: #ffbf2f; }
+    .modal-field {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+      color: #b8cdeb;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    #highValueBody {
+      max-height: min(58vh, 520px);
+      overflow: auto;
+      padding-bottom: 2px;
+    }
+    #highValueBody .detail-table { min-width: 0; table-layout: fixed; }
+    #highValueBody .detail-table th:last-child,
+    #highValueBody .detail-table td:last-child { width: 96px; text-align: right; }
+    #highValueBody .detail-table th:first-child,
+    #highValueBody .detail-table td:first-child { width: auto; text-align: left; }
+    #highValueBody .detail-table td {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .detail-table th,
+    .detail-table td {
+      border-bottom: 1px solid rgba(148, 163, 184, .11);
+      padding: 8px 6px;
+      text-align: left;
+    }
+    .detail-table th { color: #ffbf2f; }
+    .modal-actions { display: flex; justify-content: center; gap: 10px; margin-top: 22px; }
+    .modal-close {
+      min-width: 102px;
+      min-height: 38px;
+      border: 0;
+      border-radius: 6px;
+      background: #223047;
+      color: #c9d6e5;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .notify-guide-step { font-size: 14px; line-height: 1.9; color: var(--ink); margin: 4px 0 0; }
+    /* App 模式（?app=1）：裁剪电脑端专属区域 */
+    html.app-mode #lowStockNotifyToggle { display: none !important; }
+    html.app-mode #passToggle { display: none !important; }
+    /* exe 模式：不需要库存提醒按钮 */
+    html:not(.app-mode) #lowStockNotifyToggle { display: none !important; }
+    html.app-mode .lan-access { display: none !important; }
+    html.app-mode #dbPanel, html.app-mode section[aria-label="数据库管理"] { display: none !important; }
+    html.app-mode .auto-refresh, html.app-mode .auto-refresh-status { display: none !important; }
+    html.app-mode #uidPanel { display: none !important; }
+    /* App 模式：隐藏「已加载 result.json」拖放区 + 公网访问/ngrok控制面板 */
+    /* App 模式：隐藏拖放区；#ctrlPanel 只藏 ngrok 行（统计卡片 .summary 在 ctrlPanel 内，不能连带隐藏！） */
+    html.app-mode #dropZone { display: none !important; }
+    /* App 里不需要「远程控制」入口（启动估价器由 App 底部红色按钮触发），电脑端保留用于配路径 */
+    html.app-mode #remotePanelBtn { display: none !important; }
+    html.app-mode #ctrlPanel #ngrokRow { display: none !important; }
+    html.app-mode #ctrlPanel .ngrok-token-row { display: none !important; }
+    /* App 模式：隐藏「安全与配对」折叠区 —— 批准配对只允许在电脑本机点，
+       否则手机上点一下就能自我批准，配对机制形同虚设 */
+    html.app-mode #secPairBox { display: none !important; }
+    /* 阶段3：安全重置黄条（换机/拷贝提示） */
+    .sec-warn {
+      display: none; max-width: 900px; margin: 10px auto 0;
+      padding: 10px 14px; border-radius: 10px;
+      background: var(--sec-warn-bg); color: var(--sec-warn-ink);
+      font-size: 13px; line-height: 1.7; border: 1px solid #e4cf9c;
+    }
+    .sec-warn.open { display: block; }
+    /* App 模式：WebView 整页缩放一屏显示 */
+    @media (max-width: 820px) {
+      html.app-mode { zoom: 0.8; }
+    }
+    /* App 模式：整体间距收拢（手机上板块紧凑） */
+    html.app-mode { font-size: 13px; }
+    html.app-mode .app { padding: 10px; }
+    html.app-mode .topbar { gap: 6px; margin-bottom: 8px; }
+    html.app-mode h1 { font-size: 20px; margin-bottom: 2px; }
+    html.app-mode .sub { font-size: 12px; }
+    html.app-mode .chart-panel { padding: 10px; margin-bottom: 10px; }
+    html.app-mode .chart-head { margin-bottom: 4px; }
+    html.app-mode .toolbar { padding: 6px; margin-bottom: 8px; gap: 6px; }
+    html.app-mode .trend-canvas { height: 140px; }
+    /* App 模式（?app=1）：主表列裁剪（隐藏次要列，避免手机横向滑动）——只作用于主报表表格，不误伤弹窗内小表 */
+    html.app-mode section.table-wrap > table thead th:nth-child(2),
+    html.app-mode section.table-wrap > table tbody td:nth-child(2),
+    html.app-mode section.table-wrap > table thead th:nth-child(5),
+    html.app-mode section.table-wrap > table tbody td:nth-child(5),
+    html.app-mode section.table-wrap > table thead th:nth-child(7),
+    html.app-mode section.table-wrap > table tbody td:nth-child(7),
+    html.app-mode section.table-wrap > table thead th:nth-child(8),
+    html.app-mode section.table-wrap > table tbody td:nth-child(8),
+    html.app-mode section.table-wrap > table thead th:nth-child(9),
+    html.app-mode section.table-wrap > table tbody td:nth-child(9),
+    html.app-mode section.table-wrap > table thead th:nth-child(10),
+    html.app-mode section.table-wrap > table tbody td:nth-child(10) { display: none !important; }
+    html.app-mode section.table-wrap > table { min-width: 0 !important; }
+
+    @media (max-width: 820px) {
+      .app { padding: 18px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .meta { text-align: left; }
+      .drop { align-items: stretch; flex-direction: column; }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .toolbar { align-items: stretch; flex-direction: column; }
+    }
+
+    /* ===== 阶段2：安全与配对面板 ===== */
+    .sec-block { margin-top: 12px; }
+    .sec-block-title {
+      font-size: 13px; font-weight: 600; color: var(--ink);
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    }
+    .sec-badge {
+      display: inline-block; min-width: 20px; padding: 1px 7px; border-radius: 999px;
+      background: var(--mini-bg); color: var(--accent);
+      font-size: 12px; font-weight: 600; text-align: center;
+    }
+    .sec-list { display: flex; flex-direction: column; gap: 8px; }
+    .sec-empty { font-size: 12px; color: var(--muted); padding: 8px 0; }
+    .sec-item {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+      background: var(--panel-translucent);
+    }
+    .sec-item-main { flex: 1 1 180px; min-width: 0; }
+    .sec-item-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+    .sec-item-sub {
+      font-size: 12px; color: var(--muted); margin-top: 2px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .sec-item-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+    .sec-switches { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+    .sec-sw {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--ink); cursor: pointer; user-select: none;
+    }
+    .sec-sw input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+    .sec-pending-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent-2); margin-right: 6px;
+      animation: secPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes secPulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    @media (prefers-reduced-motion: reduce) { .sec-pending-dot { animation: none; } }
+
+    /* ===== 安全与配对：放进「🔧 远程控制」弹窗后的深色适配（2026-08-29）=====
+       弹窗 .profit-modal 是深底(#101722)浅字(#d8e5f1)，而 .sec-* 原为浅色主题，
+       直接用会看不清，故在弹窗作用域内整体覆盖一遍颜色。 */
+    #remoteModal .profit-modal { width: min(520px, calc(100vw - 36px)); }
+    #secPairBox {
+      border-top: 1px solid rgba(255,255,255,.10);
+      margin-top: 4px; padding-top: 14px;
+    }
+    #secPairBox .sec-block:first-of-type { margin-top: 10px; }
+    #secPairBox .sec-block-title { color: #d8e5f1; }
+    #secPairBox .sec-note { font-size: 12px; color: #8fa3b8; line-height: 1.6; margin-bottom: 2px; }
+    #secPairBox .sec-note b { color: #ffbf2f; }
+    #secPairBox .sec-badge {
+      background: rgba(255,255,255,.10); color: #ffbf2f;
+    }
+    #secPairBox .sec-empty { color: #7d8fa3; }
+    #secPairBox .sec-item {
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.10);
+    }
+    #secPairBox .sec-item-name { color: #d8e5f1; }
+    #secPairBox .sec-item-sub { color: #8fa3b8; }
+    #secPairBox .sec-sw { color: #d8e5f1; }
+    #secPairBox .sec-sw input { accent-color: #ffbf2f; }
+    #secPairBox .status { color: #8fa3b8; font-size: 12px; margin-top: 8px; }
+    /* 弹窗里的按钮沿用弹窗风格，避免浅底黑字看不清 */
+    #secPairBox .btn {
+      background: rgba(255,255,255,.08); color: #d8e5f1;
+      border: 1px solid rgba(255,255,255,.16); border-radius: 6px;
+      padding: 4px 10px; font-size: 12px; cursor: pointer;
+    }
+    #secPairBox .btn:hover { background: rgba(255,255,255,.14); }
+    #secPairBox .btn.secondary { background: transparent; color: #8fa3b8; }
+    /* 「🔧 远程控制」按钮：有配对请求待处理时变红并带数量 */
+    #remotePanelBtn.sec-pending-alert {
+      background: #c0392b; color: #fff; border-color: #c0392b;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>BidKing 竞拍盈亏</h1>
+        <div class="sub">读取 Python 生成的 result.json，适合大日志解析后的轻量查看。</div>
+      </div>
+      <div class="actions">
+        <button class="theme-toggle" id="themeToggle" type="button">深色</button>
+        <button class="theme-toggle" id="profitColorToggle" type="button">绿盈红亏</button>
+        <button class="theme-toggle" id="lowStockNotifyToggle" type="button" title="低库存提醒开关（是否向手机发送系统通知）">库存提醒:开</button>
+        <button class="theme-toggle" id="passToggle" type="button" title="访问密码：设置后手机/App 访问需输密码才能进行远程控制">访问密码:未设置</button>
+        <button class="theme-toggle" id="remotePanelBtn" type="button" title="远程控制电脑程序">🔧 远程控制</button>
+        <div class="meta" id="meta">未加载结果</div>
+      </div>
+    </header>
+
+    <section class="drop" id="dropZone">
+      <div>
+        <strong>自动读取 result.json，也可手动选择</strong>
+        <span id="loadHint">双击 EXE 打开的页面可实时刷新；直接打开 HTML 时可手动选择 JSON。</span>
+        <div class="lan-access" id="lanAccessBox">另一台电脑访问：<code id="lanAccessUrl"></code><button class="copy-link-btn" id="copyLanUrlBtn" type="button">复制网址</button></div>
+        <div class="uid-panel" id="uidPanel">
+          <label for="uidInput">玩家 UID</label>
+          <input class="uid-input" id="uidInput" type="password" inputmode="numeric" autocomplete="off" placeholder="留空则使用上次 UID">
+          <button class="btn secondary" id="uidVisibilityToggle" type="button">显示 UID</button>
+          <button class="btn secondary" id="loadPlayersBtn" type="button">从日志读取 UID</button>
+          <select class="uid-select" id="playerSelect">
+            <option value="">选择日志候选</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="refreshBtn" type="button">实时刷新</button>
+        <label class="auto-refresh" for="autoRefreshToggle">
+          <input id="autoRefreshToggle" type="checkbox">
+          <span>5分钟自动刷新</span>
+        </label>
+        <div class="auto-refresh-status" id="autoRefreshStatus"></div>
+        <button class="btn secondary" id="chooseBtn" type="button">选择 JSON</button>
+        <div class="status" id="statusText"></div>
+      </div>
+      <input id="fileInput" type="file" accept=".json,application/json" hidden>
+    </section>
+
+    <!-- ===== 控制面板 ===== -->
+    <div class="ctrl-panel" id="ctrlPanel">
+
+      <!-- 行1：公网访问 (ngrok) -->
+      <div class="ctrl-row" id="ngrokRow" style="flex-direction:column; align-items:stretch;">
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+          <div class="ctrl-row-label">🌐 公网访问</div>
+          <div class="ctrl-row-body">
+            <button class="toggle-btn" id="ngrokToggle" type="button">
+              <span class="toggle-dot"></span>
+              <span id="ngrokToggleLabel">已关闭</span>
+            </button>
+            <span class="ngrok-status" id="ngrokStatus">未启动</span>
+            <div class="ngrok-url-box" id="ngrokUrlBox">
+              <button class="copy-link-btn" id="copyNgrokBtn" type="button">📋 复制</button>
+              <span class="ngrok-warning">请勿将此地址分享给他人</span>
+            </div>
+          </div>
+        </div>
+        <!-- Token 配置子区域 -->
+        <div class="ngrok-token-row">
+          <span class="ngrok-token-label">Token：</span>
+          <input class="ngrok-token-input" id="ngrokTokenInput" type="password"
+                 placeholder="粘贴 ngrok authtoken..." autocomplete="off" spellcheck="false">
+          <button class="ngrok-save-btn" id="ngrokSaveTokenBtn" type="button">保存 Token</button>
+          <span class="ngrok-token-saved none" id="ngrokTokenSaved">未设置</span>
+          <a href="https://dashboard.ngrok.com/get-started/your-authtoken" target="_blank"
+             style="font-size:11px; color:var(--muted); text-decoration:none; white-space:nowrap;">
+            获取 Token ↗
+          </a>
+        </div>
+      </div>
+
+    </div>
+    <div class="error" id="errorBox"></div>
+    <div class="save-warning" id="saveWarningBox" role="alert">
+      <div class="save-warning-title" id="saveWarningTitle">JSON 局数减少提醒</div>
+      <div id="saveWarningText"></div>
+      <div class="save-warning-actions">
+        <button class="btn" id="saveOldJsonBtn" type="button">保存原来的 JSON</button>
+        <button class="btn secondary" id="discardOldJsonBtn" type="button">不保存并更新</button>
+        <button class="btn secondary" id="openSaveFolderBtn" type="button">打开保存文件夹</button>
+        <button class="btn secondary" id="ackSaveWarningBtn" type="button">我已知晓</button>
+      </div>
+    </div>
+    <div class="sec-warn" id="secWarnBox" role="alert"></div>
+    <div class="empty" id="emptyBox">没有匹配记录。</div>
+
+    <!-- ===== 阶段2 的「安全与配对」已移入「🔧 远程控制」弹窗内（见 #remoteModal 里的 #secPairBox）===== -->
+
+    <section class="chart-panel" aria-label="数据库管理">
+      <div class="chart-head">
+        <div class="chart-title">数据库管理</div>
+        <div class="chart-note">生涯数据保存在项目根目录的"生涯数据库"文件夹</div>
+      </div>
+      <div id="dbStatus" class="sub">等待读取数据库状态</div>
+      <div class="actions" style="margin-top:10px">
+        <label class="sub">保留最近 <input class="limit" id="dbRetentionDays" type="number" min="0" value="0"> 天</label>
+        <button class="btn secondary" id="dbCleanBtn" type="button">清理旧数据</button>
+        <button class="btn secondary" id="dbClearBtn" type="button">清空数据库</button>
+      </div>
+    </section>
+
+    <section class="summary" id="summarySection">
+      <div class="card"><div class="label">场次</div><div class="value" id="sumGames">-</div><div class="delta" id="deltaGames"></div></div>
+      <div class="card"><div class="label">拿仓 / 未拿</div><div class="value" id="sumRecord">-</div><div class="delta" id="deltaRecord"></div></div>
+      <div class="card"><div class="label" id="rateLabel">拿仓率 <span class="rate-toggle" id="rateToggle" title="切换盈亏率">⇌</span></div><div class="value" id="sumRate">-</div><div class="delta" id="deltaRate"></div></div>
+      <div class="card actionable" id="profitCard" role="button" tabindex="0"><div class="label">合计盈亏</div><div class="value" id="sumProfit">-</div><div class="delta" id="deltaProfit"></div><button class="mini-action" id="profitDetailBtn" type="button">盈亏明细</button></div>
+      <div class="card"><div class="label">分红</div><div class="value" id="sumDividend">-</div><div class="delta" id="deltaDividend"></div></div>
+      <div class="card"><div class="label">当前银币</div><div class="value" id="sumSilverCoin">-</div><div class="delta" id="deltaSilverCoin"></div></div>
+    </section>
+
+    <section class="chart-panel" aria-label="收益走势">
+      <div class="chart-head">
+        <div class="chart-title">收益走势</div>
+        <div class="chart-note" id="profitTrendNote">等待加载数据</div>
+      </div>
+      <canvas class="trend-canvas" id="profitTrendCanvas" width="1200" height="210"></canvas>
+    </section>
+
+    <section class="chart-panel" aria-label="拍品价值走势">
+      <div class="chart-head">
+        <div class="chart-title">拍品价值走势</div>
+        <div class="chart-note" id="valueTrendNote">等待加载数据</div>
+      </div>
+      <canvas class="trend-canvas" id="valueTrendCanvas" width="1200" height="210"></canvas>
+    </section>
+
+    <section class="chart-panel" aria-label="道具当前数量">
+      <div class="chart-head">
+        <div class="chart-title">道具当前数量</div>
+        <div class="chart-note">档位≥3 或 对局正在使用的道具 · 刷新即更新</div>
+      </div>
+      <div id="inventoryBox"></div>
+    </section>
+
+    <section class="chart-panel" aria-label="各地图大类拍品价值">
+      <div class="chart-head">
+        <div class="chart-title">各地图大类拍品价值</div>
+        <div class="chart-note">按当前筛选结果统计</div>
+      </div>
+      <div id="mapValueStats"></div>
+    </section>
+
+    <section class="chart-panel" aria-label="银币数量走势">
+      <div class="chart-head">
+        <div class="chart-title">银币数量走势</div>
+        <div class="chart-note" id="silverTrendNote">等待加载数据</div>
+      </div>
+      <canvas class="trend-canvas" id="silverTrendCanvas" width="1200" height="210"></canvas>
+    </section>
+
+    <section class="toolbar">
+      <div class="seg">
+        <button class="tool-btn active" id="btnAll" type="button">全部</button>
+        <button class="tool-btn" id="btnWins" type="button">只看拍到</button>
+        <span class="sub">最近</span>
+        <input class="limit" id="limitInput" type="number" min="1" placeholder="全部">
+        <span class="sub">场</span>
+        <span class="sub">从</span>
+        <input class="time-input" id="fromTime" type="datetime-local">
+        <span class="sub">到</span>
+        <input class="time-input" id="toTime" type="datetime-local">
+        <select class="time-input" id="profitFilter" title="按盈亏筛选">
+          <option value="all">全部盈亏</option>
+          <option value="profit">只看盈利</option>
+          <option value="loss">只看亏损</option>
+        </select>
+        <button class="tool-btn" id="highValueBtn" type="button">高价值物品</button>
+        <button class="tool-btn" id="statsBtn" type="button">统计图表</button>
+        <button class="tool-btn" id="careerBtn" type="button">生涯数据统查</button>
+        <button class="tool-btn" id="maskDigitsBtn" type="button">显示后三位</button>
+        <button class="tool-btn" id="maskWinnerBtn" type="button">显示赢家</button>
+        <button class="tool-btn" id="itemPriceConfigBtn" type="button">⚙️ 道具价格配置/数量</button>
+      </div>
+      <div class="chips" id="chips">
+        <button class="chip active" type="button" data-prefix="21">快递</button>
+        <button class="chip active" type="button" data-prefix="22">仓库</button>
+        <button class="chip active" type="button" data-prefix="23">集装箱</button>
+        <button class="chip active" type="button" data-prefix="24">别墅</button>
+        <button class="chip active" type="button" data-prefix="25">残骸</button>
+        <button class="chip active" type="button" data-prefix="26">拍卖会</button>
+        <button class="chip active" type="button" data-prefix="56">竞拍之巅</button>
+      </div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>回合</th>
+            <th>地图</th>
+            <th>赢家</th>
+            <th>道具</th>
+            <th>拍下物品</th>
+            <th>我的出价</th>
+            <th>赢家出价</th>
+            <th>对手最高价</th>
+            <th>拍品价值</th>
+            <th>展示盈亏</th>
+            <th>我的盈亏</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr><td colspan="12" style="text-align:center;color:#69717d;padding:28px">等待加载 result.json</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="profitDetailModal" aria-hidden="true">
+    <section class="profit-modal" role="dialog" aria-modal="true" aria-labelledby="profitDetailTitle">
+      <h2 id="profitDetailTitle">盈亏明细</h2>
+      <div id="profitDetailBody"></div>
+      <div class="modal-actions">
+        <button class="modal-close" id="profitDetailClose" type="button">关闭</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="highValueModal" aria-hidden="true">
+    <section class="profit-modal high-value-modal" role="dialog" aria-modal="true" aria-labelledby="highValueTitle">
+      <h2 id="highValueTitle">高价值物品</h2>
+      <label class="modal-field">价值下限（万）
+        <input class="time-input" id="highValueInput" type="number" min="0" step="1" value="100">
+      </label>
+      <div id="highValueBody"></div>
+      <div class="modal-actions">
+        <button class="modal-close" id="highValueClose" type="button">关闭</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="statsModal" aria-hidden="true">
+    <section class="profit-modal" role="dialog" aria-modal="true" aria-labelledby="statsTitle">
+      <h2 id="statsTitle">统计图表</h2>
+      <div class="modal-field">
+        <label>开始 <input class="time-input" id="statsFromTime" type="datetime-local"></label>
+        <label>结束 <input class="time-input" id="statsToTime" type="datetime-local"></label>
+      </div>
+      <div id="statsBody"></div>
+      <div class="modal-actions">
+        <button class="modal-close" id="statsClose" type="button">关闭</button>
+      </div>
+    </section>
+  </div>
+
+  
+  <!-- ===== 弹窗（必须在脚本前，脚本里 getElementById 才能绑定） ===== -->
+  <div class="modal-backdrop" id="passModal" aria-hidden="true">
+    <section class="profit-modal" role="dialog" aria-modal="true" aria-labelledby="passModalTitle">
+      <h2 id="passModalTitle" class="modal-title">🔑 访问密码</h2>
+      <div id="passModalHint" style="display:none;font-size:12px;color:#b93434;margin:-6px 0 8px;"></div>
+      <p style="color:var(--muted);font-size:12px;">设置后：手机 App / 网页发起「刷新、开/关 ngrok、退出程序」等远程控制时需输入此密码（查看报表不需要）。清除输入即为不启用。</p>
+      <div class="modal-field" id="passCurrentField" style="display:none;">
+        <input type="password" id="passCurrentInput" placeholder="输入当前密码（验证后修改）" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:14px;margin-bottom:8px;">
+      </div>
+      <div class="modal-field">
+        <input type="password" id="passInput" placeholder="输入新密码（留空=不启用）" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:14px;">
+      </div>
+      <div class="modal-field" id="passShowField" style="display:none;">
+        <button class="modal-close" id="passShowBtn" type="button" style="background:var(--button-secondary-bg);color:var(--ink);width:100%;">👁 查看当前密码</button>
+      </div>
+      <div id="passShowText" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--mini-bg);color:var(--ink);font-size:14px;word-break:break-all;"></div>
+      <div class="modal-actions">
+        <button class="modal-close" id="passSaveBtn" type="button">保存</button>
+        <button class="modal-close" id="passCancelBtn" type="button" style="background:var(--button-secondary-bg);color:var(--ink)">取消</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- 远程启动电脑程序弹窗（原来的「刷新数据 / 退出程序」入口已按需求移除） -->
+  <div class="modal-backdrop" id="remoteModal" aria-hidden="true">
+    <section class="profit-modal" role="dialog" aria-modal="true" aria-labelledby="remoteModalTitle">
+      <h2 id="remoteModalTitle" class="modal-title">🚀 远程启动电脑程序</h2>
+      <div class="modal-field" id="remotePwdField" style="display:none;">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px;">需要访问密码（在电脑上设置的那个）</label>
+        <input type="password" id="remotePwdInput" placeholder="访问密码" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:14px;">
+      </div>
+      <div class="modal-field">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px;">程序完整路径（留空则自动在下面目录里按文件名搜索）</label>
+        <input type="text" id="launcherPathInput" placeholder="C:\...\竞拍之王全自动估价器.exe" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:13px;">
+        <label style="font-size:12px;color:var(--muted);display:block;margin:6px 0 3px;">搜索目录（多个用英文逗号分隔）</label>
+        <input type="text" id="launcherDirsInput" placeholder="C:\Users\用户名\Desktop" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:13px;">
+        <div class="modal-actions" style="margin-top:8px;">
+          <button class="modal-close" id="launcherSaveBtn" type="button">💾 保存配置</button>
+          <button class="modal-close" id="launcherStartBtn" type="button" style="background:#b93434;color:#fff">🚀 启动程序</button>
+        </div>
+        <div id="launcherStatus" style="font-size:12px;color:var(--muted);margin-top:8px;word-break:break-all;"></div>
+      </div>
+
+      <!-- ===== 阶段2：安全与配对（2026-08-29 移入本弹窗）===== -->
+      <div class="modal-field sec-in-modal" id="secPairBox">
+        <div class="sec-block-title" style="margin-bottom:6px;">🔐 安全与配对</div>
+        <div class="sec-note">🏠 <b>同一 Wi-Fi（局域网）的手机/电脑不需要配对</b>：填对访问密码即可连接（未设密码则直接连）。<br>以下防护只针对 <b>ngrok 公网访问</b>：公网设备必须在这里点「同意」才能连上，配对成功后改用密钥登录，密码不再上网。</div>
+
+        <div class="sec-block">
+          <div class="sec-block-title">待处理请求 <span class="sec-badge" id="pairPendingBadge">0</span></div>
+          <div id="pairPendingList" class="sec-list"><div class="sec-empty">目前没有待处理的配对请求</div></div>
+        </div>
+
+        <div class="sec-block">
+          <div class="sec-block-title">已配对设备 <span class="sec-badge" id="pairDeviceBadge">0</span></div>
+          <div id="pairDeviceList" class="sec-list"><div class="sec-empty">还没有配对过的设备</div></div>
+        </div>
+
+        <div class="sec-block">
+          <div class="sec-block-title">安全开关（仅对 ngrok 公网访问生效）</div>
+          <div class="sec-switches">
+            <label class="sec-sw"><input type="checkbox" id="swPairingRequired"><span>公网新设备必须配对后才能查看数据（局域网无需配对）</span></label>
+            <label class="sec-sw"><input type="checkbox" id="swRemoteLaunch"><span>允许公网手机远程启动估价器（局域网手机不受此限制）</span></label>
+            <label class="sec-sw"><input type="checkbox" id="swNgrokNeedPair"><span>公网访问（ngrok）需已设密码且已配对</span></label>
+          </div>
+        </div>
+        <div class="status" id="pairStatus"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="modal-close" id="remoteCancelBtn" type="button" style="background:var(--button-secondary-bg);color:var(--ink)">关闭</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- 通知权限开启引导弹窗 -->
+  <div class="modal-backdrop" id="notifyGuideModal" aria-hidden="true">
+    <section class="profit-modal" role="dialog" aria-modal="true" aria-labelledby="notifyGuideTitle">
+      <h2 id="notifyGuideTitle" class="modal-title">🔔 开启系统通知（低库存提醒）</h2>
+      <p class="notify-guide-step" id="notifyGuideText">加载中…</p>
+      <div class="modal-actions">
+        <button class="modal-close" id="notifyGuideClose" type="button">我已开启，回去重开开关</button>
+        <button class="modal-close" id="notifyGuideCancel" type="button" style="background:var(--button-secondary-bg);color:var(--ink)">暂不开启</button>
+      </div>
+    </section>
+  </div>
+<script>
+    // ===== 全局令牌注入（2026-08-29 修复）=====
+    // 背景：阶段1 给 GET 读接口加了统一鉴权，但页面里 20 多处 fetch 是裸调用、不带令牌，
+    // 导致「控制锁状态 / 启动器配置 / 生涯库状态 / ngrok 状态 / 旧 JSON 提醒」等接口全部 401，
+    // 页面上对应功能点了没反应。这里统一包一层 fetch，同源 /api/ 请求自动带上令牌，
+    // 不必逐个改调用点，也避免以后新增调用再漏。
+    (function () {
+      const _origFetch = window.fetch;
+      if (typeof _origFetch !== "function") return;
+      window.fetch = function (input, init) {
+        try {
+          let tk = "";
+          try { tk = window.sessionStorage.getItem("bk_token") || ""; } catch (e) { tk = ""; }
+          if (tk) {
+            const url = (typeof input === "string") ? input : ((input && input.url) || "");
+            // result.json / silver_cache.json 对公网访客也要令牌（2026-08-29），一并注入
+            if (url.indexOf("/api/") !== -1 || url.indexOf("result.json") !== -1 || url.indexOf("silver_cache") !== -1) {
+              if (typeof Request !== "undefined" && input instanceof Request) {
+                // Request 的 headers 可能是只读 guard，set 失败就跳过（外层 try 兜住）
+                if (!input.headers.has("X-Auth-Token")) input.headers.set("X-Auth-Token", tk);
+              } else {
+                init = init || {};
+                const h = new Headers(init.headers || {});
+                if (!h.has("X-Auth-Token")) h.set("X-Auth-Token", tk);
+                init.headers = h;
+              }
+            }
+          }
+        } catch (e) { /* 注入失败就按原样发，不影响原有逻辑 */ }
+        return _origFetch(input, init);
+      };
+    })();
+
+    let report = null;
+    let mode = "all";
+    let maskDigits = true;
+    let maskWinner = true;
+    let previousRefreshSummary = null;
+    // App 模式（?app=1）：裁剪电脑端专属区域 + 不抢刷新控制锁
+    const APP_MODE = /[?&]app=1/.test(location.search);
+    if (APP_MODE) {
+      try { document.documentElement.classList.add("app-mode"); } catch (e) {}
+    }
+
+    // ===== 公网访问准入（2026-08-29 用户要求）：地址被别人知道也不能直接看 =====
+    // 公网访客（ngrok）：「新设备必须配对」开（默认）= 必须电脑端点「同意」才能看数据。
+    // 流程：输访问密码 → 发起配对 → 等电脑端「安全与配对」点同意 → 拿令牌 → 进入。
+    // 本机/局域网访客：直接放行（若设了密码，由各接口的 401 流程提示）。
+    function _bkHexToBytes(hex) {
+      const a = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < a.length; i++) a[i] = parseInt(hex.substr(i * 2, 2), 16);
+      return a;
+    }
+    async function _bkHmacHex(keyHex, msg) {
+      const k = await crypto.subtle.importKey("raw", _bkHexToBytes(keyHex),
+        { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(msg));
+      return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+    function _bkBrowserDid() {
+      let did = "";
+      try { did = localStorage.getItem("bk_did") || ""; } catch (e) {}
+      if (!did) {
+        did = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+            : ("web-" + Date.now() + "-" + Math.random().toString(16).slice(2, 10));
+        try { localStorage.setItem("bk_did", did); } catch (e) {}
+      }
+      return did;
+    }
+    async function _bkStoreToken(tk) {
+      try {
+        sessionStorage.setItem("bk_token", tk);
+        localStorage.setItem("bk_token", tk);
+      } catch (e) {}
+    }
+    // 已配对浏览器的密钥重登（令牌过期后免再审批；crypto.subtle 需 https，公网 ngrok 满足）
+    async function browserLogin() {
+      let did = "", dkey = "", sid = "";
+      try {
+        did = localStorage.getItem("bk_did") || "";
+        dkey = localStorage.getItem("bk_dkey") || "";
+        sid = localStorage.getItem("bk_sid") || "";
+      } catch (e) {}
+      if (!did || !dkey || !sid || !window.crypto || !crypto.subtle) return false;
+      try {
+        const ch = await fetch("/api/auth/challenge?device_id=" + encodeURIComponent(did), { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null).catch(() => null);
+        if (!ch || !ch.nonce) return false;
+        const ts = Math.floor(Date.now() / 1000);
+        const sig = await _bkHmacHex(dkey, "auth|" + sid + "|" + ch.nonce + "|" + ts);
+        const r = await fetch("/api/auth", {
+          method: "POST", cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ device_id: did, nonce: ch.nonce, ts: ts, sig: sig })
+        });
+        const d = await r.json().catch(() => null);
+        if (d && d.token) { await _bkStoreToken(d.token); return true; }
+      } catch (e) {}
+      return false;
+    }
+    // 密码登录（公网且服务器允许只读时才直接给令牌；要求配对时返回 403 走配对）
+    async function passwordFlow(hint) {
+      for (let tries = 0; tries < 3; tries++) {
+        const pwd = prompt((hint || "请输入访问密码") + "\n（电脑端设置的访问密码，取消=放弃）");
+        if (pwd === null) return false;
+        if (!pwd) continue;
+        const r = await fetch("/api/auth", {
+          method: "POST", cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pwd: pwd })
+        }).catch(() => null);
+        const d = r ? await r.json().catch(() => ({})) : {};
+        if (r && r.ok && d.token) { await _bkStoreToken(d.token); return true; }
+        if (r && r.status === 403 && (d.error || "").indexOf("尚未配对") !== -1) {
+          return await pairingFlow(pwd);
+        }
+        hint = "密码错误，请重试（取消=放弃）：";
+      }
+      return false;
+    }
+    // 配对流程：密码 → 排队 → 等电脑端「同意」→ 拿令牌/密钥
+    async function pairingFlow(pwd) {
+      const did = _bkBrowserDid();
+      const ua = (navigator.userAgent || "browser").slice(0, 36);
+      const r = await fetch("/api/pair/request", {
+        method: "POST", cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device_id: did, name: "网页浏览器", model: ua, pwd: pwd })
+      }).catch(() => null);
+      const d = r ? await r.json().catch(() => ({})) : {};
+      // 该设备此前已同意过配对：服务端凭密码直接重发密钥+令牌（同一设备只需同意一次）
+      if (d && d.ok && d.auto_paired && d.token) {
+        if (d.device_key) {
+          try { localStorage.setItem("bk_dkey", d.device_key); } catch (e) {}
+          try { localStorage.setItem("bk_sid", d.server_id || ""); } catch (e) {}
+        }
+        await _bkStoreToken(d.token);
+        return true;
+      }
+      if (!r || !r.ok || !d.rid) {
+        alert("配对请求失败：" + (d.error || "网络错误"));
+        return false;
+      }
+      showStatus("⏳ 等待电脑端同意：电脑报表页 →「远程启动电脑程序」→「安全与配对」→ 点「同意」（最长等 5 分钟）…");
+      const deadline = Date.now() + 300000;
+      while (Date.now() < deadline) {
+        await new Promise(res => setTimeout(res, 2500));
+        const st = await fetch("/api/pair/status?rid=" + encodeURIComponent(d.rid) +
+                               "&did=" + encodeURIComponent(did), { cache: "no-store" })
+          .then(x => x.ok ? x.json() : null).catch(() => null);
+        if (!st) continue;
+        if (st.state === "approved") {
+          if (st.device_key) {
+            try { localStorage.setItem("bk_dkey", st.device_key); } catch (e) {}
+            try { localStorage.setItem("bk_sid", st.server_id || ""); } catch (e) {}
+          }
+          if (st.browser_token) { await _bkStoreToken(st.browser_token); return true; }
+          return (await browserLogin()) || (await passwordFlow("配对已同意，请输入访问密码"));
+        }
+        if (st.state !== "pending") { alert("配对未完成（" + (st.state || "未知") + "），请刷新重试"); return false; }
+      }
+      alert("等待超时（5 分钟）。请刷新页面重试，并在电脑端及时点「同意」。");
+      return false;
+    }
+    // App 模式专用：等 App 原生注入的新令牌就绪后再拉数据。
+    // 竞态背景（2026-08-30）：App 在 onPageFinished 才注入令牌，而本页 DOMContentLoaded
+    // 就开始拉数据——局域网+已设密码时，抢先发出的请求没有令牌 → 401，
+    // 表现为生涯/道具/库存「没数据」、价格库「无法连接」。exe 重启令牌全失效后必现。
+    // 等待策略：令牌从初始值发生变化（=App 注入了新令牌）或超时 15 秒，再放行。
+    function waitForAppToken(cb) {
+      let init = "";
+      try { init = sessionStorage.getItem("bk_token") || ""; } catch (e) {}
+      let n = 0;
+      const t = setInterval(function() {
+        let tk = "";
+        try { tk = sessionStorage.getItem("bk_token") || ""; } catch (e) {}
+        if ((tk && tk !== init) || n >= 75) { clearInterval(t); cb(); }
+        n++;
+      }, 200);
+    }
+
+    // 页面加载时的准入闸：拿到有效令牌才放行数据加载
+    async function ensureAccess() {      let tk = "";
+      try { tk = sessionStorage.getItem("bk_token") || localStorage.getItem("bk_token") || ""; } catch (e) {}
+      if (tk) {
+        await _bkStoreToken(tk);
+        const r = await fetch("/api/career-db-status", { cache: "no-store" }).catch(() => null);
+        if (r && r.ok) return true;
+        if (await browserLogin()) return true;
+        try { sessionStorage.removeItem("bk_token"); localStorage.removeItem("bk_token"); } catch (e) {}
+      } else if (await browserLogin()) {
+        return true;
+      }
+      let info = null;
+      try { info = await fetch("/api/server-info", { cache: "no-store" }).then(x => x.ok ? x.json() : null); } catch (e) {}
+      if (!info || info.peer !== "public") return true;   // 本机/局域网：直接放行
+      if (!info.pairing_needed) return await passwordFlow("这是公网访问，请输入访问密码");
+      return await pairingFlow("");   // pairing_needed：先拿密码再排队等同意
+    }
+
+    const prefixes = new Set([21, 22, 23, 24, 25, 26, 56]);
+
+    const dropZone = document.getElementById("dropZone");
+    const fileInput = document.getElementById("fileInput");
+    const errorBox = document.getElementById("errorBox");
+    const emptyBox = document.getElementById("emptyBox");
+    const saveWarningBox = document.getElementById("saveWarningBox");
+    const saveWarningTitle = document.getElementById("saveWarningTitle");
+    const saveWarningText = document.getElementById("saveWarningText");
+    const saveOldJsonBtn = document.getElementById("saveOldJsonBtn");
+    const discardOldJsonBtn = document.getElementById("discardOldJsonBtn");
+    const openSaveFolderBtn = document.getElementById("openSaveFolderBtn");
+    const ackSaveWarningBtn = document.getElementById("ackSaveWarningBtn");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const themeToggle = document.getElementById("themeToggle");
+    const profitColorToggle = document.getElementById("profitColorToggle");
+    const statusText = document.getElementById("statusText");
+    const profitDetailModal = document.getElementById("profitDetailModal");
+    const profitDetailBody = document.getElementById("profitDetailBody");
+    const profitTrendCanvas = document.getElementById("profitTrendCanvas");
+    const profitTrendNote = document.getElementById("profitTrendNote");
+    const valueTrendCanvas = document.getElementById("valueTrendCanvas");
+    const valueTrendNote = document.getElementById("valueTrendNote");
+    const silverTrendCanvas = document.getElementById("silverTrendCanvas");
+    const silverTrendNote = document.getElementById("silverTrendNote");
+    const highValueModal = document.getElementById("highValueModal");
+    const highValueBody = document.getElementById("highValueBody");
+    const highValueInput = document.getElementById("highValueInput");
+    const statsModal = document.getElementById("statsModal");
+    const statsBody = document.getElementById("statsBody");
+    const statsFromTime = document.getElementById("statsFromTime");
+    const statsToTime = document.getElementById("statsToTime");
+    const uidInput = document.getElementById("uidInput");
+    const loadPlayersBtn = document.getElementById("loadPlayersBtn");
+    const playerSelect = document.getElementById("playerSelect");
+    const uidVisibilityToggle = document.getElementById("uidVisibilityToggle");
+    const autoRefreshToggle = document.getElementById("autoRefreshToggle");
+    const autoRefreshStatus = document.getElementById("autoRefreshStatus");
+    const lanAccessBox = document.getElementById("lanAccessBox");
+    const lanAccessUrl = document.getElementById("lanAccessUrl");
+    const copyLanUrlBtn = document.getElementById("copyLanUrlBtn");
+    const dbStatus = document.getElementById("dbStatus");
+    const dbRetentionDays = document.getElementById("dbRetentionDays");
+    const dbCleanBtn = document.getElementById("dbCleanBtn");
+    const dbClearBtn = document.getElementById("dbClearBtn");
+    const mapLabels = { 21: "快递", 22: "仓库", 23: "集装箱", 24: "别墅", 25: "残骸", 26: "拍卖会", 56: "竞拍之巅" };
+    const AUTO_REFRESH_MS = 5 * 60 * 1000;
+    const CONTROL_HEARTBEAT_MS = 30 * 1000;
+    const clientId = getClientId();
+    let autoRefreshTimer = null;
+    let autoRefreshCountdownTimer = null;
+    let controlHeartbeatTimer = null;
+    let autoRefreshNextAt = 0;
+    let refreshInFlight = false;
+    let lockState = { locked: false, owner: "" };
+    let saveWarningTimer = null;
+    let lastResolvedSaveWarningKey = "";
+
+    function fmt(value) {
+      return Number(value || 0).toLocaleString("zh-CN");
+    }
+
+    function signed(value) {
+      const n = Number(value || 0);
+      return (n >= 0 ? "+" : "") + fmt(n);
+    }
+
+    function normalizeMapPrefix(mapId) {
+      const prefix = Math.floor(Number(mapId || 0) / 100);
+      if (prefix === 44) return 24;
+      if (prefix === 45) return 25;
+      return prefix;
+    }
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.style.display = "block";
+    }
+
+    function clearError() {
+      errorBox.style.display = "none";
+      errorBox.textContent = "";
+    }
+
+    let _lanUrl = "";  // 本地 LAN 地址，始终保存，不受 ngrok 状态影响
+
+    async function loadServerInfo() {
+      try {
+        const response = await fetch("/api/server-info", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        // 版本署名页脚（2026-08-30）——必须放在 lan_url 判断之前：公网访客没有 lan_url 也要显示版本
+        const appFooter = document.getElementById("appFooter");
+        if (appFooter && data.app_version) {
+          appFooter.textContent = "BidKing 竞拍盈亏统计工具 v" + data.app_version + " · " + (data.app_signature || "");
+        }
+        if (!data.lan_url) return;
+        _lanUrl = data.lan_url;
+        lanAccessUrl.textContent = _lanUrl;
+        // 同步密码状态到按钮
+        if (typeof data.pass_enabled !== "undefined" && passToggleBtn) {
+          passEnabled = !!data.pass_enabled;
+          passToggleBtn.textContent = passEnabled ? "访问密码:已设置" : "访问密码:未设置";
+        }
+        // 没开公网就显示，开了公网就隐藏（由 setNgrokUi 控制）
+        if (!_ngrokPublicUrl) lanAccessBox.style.display = "block";
+      } catch (err) {
+        lanAccessBox.style.display = "none";
+      }
+    }
+
+    async function copyLanUrl() {
+      const url = lanAccessUrl.textContent.trim();
+      if (!url) return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(url);
+        } else {
+          const textarea = document.createElement("textarea");
+          textarea.value = url;
+          textarea.style.position = "fixed";
+          textarea.style.left = "-9999px";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+        }
+        showStatus("局域网网址已复制");
+      } catch (error) {
+        showError("复制失败，可手动选中局域网网址。");
+      }
+    }
+
+    function showStatus(message) {
+      statusText.textContent = message || "";
+    }
+
+    function formatDbTime(ts) {
+      return ts ? new Date(Number(ts) * 1000).toLocaleString("zh-CN", { hour12: false }) : "暂无";
+    }
+
+    function renderDbStatus(status) {
+      if (!status) return;
+      dbRetentionDays.value = Number(status.retention_days || 0);
+      dbStatus.innerHTML = [
+        `数据库位置：<strong>${escapeHtml(status.db_path || "")}</strong>`,
+        `当前总局数：<strong>${fmt(status.total_games)}</strong>`,
+        `最早记录：<strong>${formatDbTime(status.earliest_ts)}</strong>`,
+        `最新记录：<strong>${formatDbTime(status.latest_ts)}</strong>`,
+        `清理策略：<strong>${Number(status.retention_days || 0) > 0 ? `保留最近 ${fmt(status.retention_days)} 天` : "永不自动清理"}</strong>`,
+        `上次导入：<strong>${escapeHtml(status.last_import || "暂无")}</strong>`
+      ].join("<br>");
+    }
+
+    async function loadDbStatus() {
+      try {
+        const response = await fetch("/api/career-db-status", { cache: "no-store" });
+        if (!response.ok) return;
+        renderDbStatus(await response.json());
+      } catch (error) {
+        dbStatus.textContent = "数据库状态读取失败";
+      }
+    }
+
+    async function cleanDbByRetention() {
+      const retention = Number(dbRetentionDays.value || 0);
+      const response = await fetch("/api/career-db-clean", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ retention_days: retention })
+      });
+      const data = await response.json();
+      showStatus(`数据库已清理 ${fmt(data.deleted)} 局`);
+      renderDbStatus(data);
+    }
+
+    async function clearDbWithConfirm() {
+      if (!window.confirm("确认清空数据库中的所有生涯数据？此操作不会删除 Player.log 和 result.json。")) return;
+      const response = await fetch("/api/career-db-clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true })
+      });
+      const data = await response.json();
+      showStatus(`数据库已清空 ${fmt(data.deleted)} 局`);
+      renderDbStatus(data);
+    }
+
+    function formatCountdown(ms) {
+      const left = Math.max(0, Math.ceil(ms / 1000));
+      const minutes = Math.floor(left / 60);
+      const seconds = left % 60;
+      return `${minutes}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    function renderSaveWarning(state) {
+      if (!state || !state.visible) {
+        saveWarningBox.classList.remove("open");
+        if (saveWarningTimer) window.clearInterval(saveWarningTimer);
+        saveWarningTimer = null;
+        return;
+      }
+      saveWarningBox.classList.add("open");
+      saveOldJsonBtn.style.display = state.requires_confirmation ? "" : "none";
+      discardOldJsonBtn.style.display = state.requires_confirmation ? "" : "none";
+      ackSaveWarningBtn.style.display = state.requires_confirmation ? "none" : "";
+      openSaveFolderBtn.disabled = !state.local;
+      const oldGames = fmt(state.old_games || 0);
+      const newGames = fmt(state.new_games || 0);
+      const savedName = state.saved_path ? String(state.saved_path).split(/[\\/]/).pop() : "";
+      const updateText = () => {
+        if (state.requires_confirmation) {
+          const left = Number(state.deadline_ms || 0) - Date.now();
+          saveWarningTitle.textContent = "JSON 局数减少，是否保存原来的 JSON？";
+          saveWarningText.textContent = `当前 ${oldGames} 场，新结果 ${newGames} 场。${formatCountdown(left)} 内无应答将默认保存旧 JSON 后再更新。`;
+        } else {
+          saveWarningTitle.textContent = state.saved ? "旧 JSON 已保存" : "旧 JSON 未保存";
+          saveWarningText.textContent = state.saved
+            ? `已保存为 ${savedName || "保存文件"}。提醒会一直保留，按“我已知晓”后关闭。`
+            : "已按你的选择不保存旧 JSON。提醒会一直保留，按“我已知晓”后关闭。";
+        }
+      };
+      updateText();
+      if (saveWarningTimer) window.clearInterval(saveWarningTimer);
+      saveWarningTimer = state.requires_confirmation ? window.setInterval(updateText, 1000) : null;
+    }
+
+    async function loadSaveWarning() {
+      try {
+        const response = await fetch("/api/json-save-warning", { cache: "no-store" });
+        if (!response.ok) return;
+        const state = await response.json();
+        renderSaveWarning(state);
+        if (state.visible && !state.requires_confirmation && (state.status === "saved" || state.status === "discarded")) {
+          const key = `${state.status}:${state.saved_path || ""}:${state.new_games || 0}`;
+          if (key !== lastResolvedSaveWarningKey) {
+            lastResolvedSaveWarningKey = key;
+            await loadReportFromServer(false);
+          }
+        }
+      } catch (error) {
+      }
+    }
+
+    async function postSaveWarningAction(path) {
+      // 显式声明 JSON：后端要求 POST 必须带 application/json（防跨域简单请求 CSRF）
+      const response = await fetch(path, {
+        method: "POST", cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+      if (!response.ok) {
+        if (response.status === 403) showError("只有本机打开的页面可以打开保存文件夹。");
+        return null;
+      }
+      const state = await response.json().catch(() => null);
+      if (state && Object.prototype.hasOwnProperty.call(state, "visible")) {
+        renderSaveWarning(state);
+      }
+      return state;
+    }
+
+    function getClientId() {
+      let id = localStorage.getItem("bidking-client-id");
+      if (!id) {
+        const randomPart = window.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+        id = `client-${randomPart}`;
+        localStorage.setItem("bidking-client-id", id);
+      }
+      return id;
+    }
+
+    function isLockedByOther() {
+      return Boolean(lockState.locked && lockState.owner !== clientId);
+    }
+
+    function applyControlLock(state) {
+      lockState = state || { locked: false, owner: "" };
+      const lockedByOther = isLockedByOther();
+      refreshBtn.disabled = lockedByOther || refreshInFlight;
+      autoRefreshToggle.disabled = lockedByOther;
+      loadPlayersBtn.disabled = lockedByOther;
+      uidInput.disabled = lockedByOther;
+      playerSelect.disabled = lockedByOther;
+      if (lockedByOther) {
+        autoRefreshStatus.textContent = "其他设备自动刷新中";
+      } else {
+        updateAutoRefreshStatus();
+      }
+    }
+
+    async function refreshControlState() {
+      try {
+        const response = await fetch(`/api/control?client_id=${encodeURIComponent(clientId)}`, { cache: "no-store" });
+        if (response.ok) applyControlLock(await response.json());
+      } catch (error) {
+      }
+    }
+
+    // ---- 统一鉴权：设了访问密码时，控制类请求需带会话令牌（否则后端 401）----
+    // 本机（exe 自开页面 127.0.0.1 / localhost）无需密码；仅远程(局域网/ngrok)才需要。
+    // 优先用已保存的令牌；没有则弹一次密码输入换令牌（远程用户输一次，存着续期用）
+    const isLocalAccess = () => {
+      const h = location.hostname || "";
+      return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "";
+    };
+    let cachedAuthToken = "";
+    async function getControlToken() {
+      if (cachedAuthToken) return cachedAuthToken;
+      // 本机访问：后端已对本机放行，无需密码
+      if (isLocalAccess()) return "local";
+      try {
+        const pwd = window.prompt("本服务已设置访问密码，请输入密码以继续操作：", "");
+        if (pwd === null) return "";
+        const r = await fetch("/api/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pwd })
+        });
+        const d = await r.json();
+        if (d && d.token) {
+          cachedAuthToken = d.token;
+          return cachedAuthToken;
+        }
+        showError("密码错误，无法获取会话令牌");
+        return "";
+      } catch (e) {
+        showError("获取会话令牌失败：" + (e.message || e));
+        return "";
+      }
+    }
+
+    async function postControl(path, extra = {}) {
+      const headers = { "Content-Type": "application/json" };
+      // 设了密码时带令牌；拿不到令牌就不发（避免 401 误导成“被占用”）
+      // 本机访问 getControlToken() 返回 "local"，表示无需令牌（后端已对本机放行）
+      const token = await getControlToken();
+      if (passEnabled && !token) {
+        applyControlLock({ locked: false, owner: "" });
+        return { ok: false, data: { error: "auth", msg: "需要访问密码" } };
+      }
+      if (token && token !== "local") headers["X-Auth-Token"] = token;
+      const response = await fetch(path, {
+        method: "POST",
+        cache: "no-store",
+        headers,
+        body: JSON.stringify({ client_id: clientId, ...extra })
+      });
+      const data = await response.json().catch(() => ({}));
+      applyControlLock(data);
+      // 令牌失效（重启进程后旧 token 作废）：清缓存重试一次（仅远程需要）
+      if (response.status === 401 && data && data.error === "unauthorized" && cachedAuthToken) {
+        cachedAuthToken = "";
+        const token2 = await getControlToken();
+        if (token2 && token2 !== "local") {
+          const headers2 = { "Content-Type": "application/json", "X-Auth-Token": token2 };
+          const retry = await fetch(path, {
+            method: "POST",
+            cache: "no-store",
+            headers: headers2,
+            body: JSON.stringify({ client_id: clientId, ...extra })
+          });
+          const data2 = await retry.json().catch(() => ({}));
+          applyControlLock(data2);
+          return { ok: retry.ok, data: data2 };
+        }
+      }
+      return { ok: response.ok, data };
+    }
+
+    async function claimAutoRefreshControl() {
+      let result = await postControl("/api/control/claim");
+      if (result.ok) return true;
+      // 被其他设备持锁：提供「强制接管」选项（用户手动确认后覆盖旧锁）
+      const owner = (result.data && result.data.owner) || "";
+      const force = window.confirm(
+        "自动刷新控制权被「" + owner.substring(0, 14) + "…」占用。\n" +
+        "选【确定】强制接管（旧页面将失去自动刷新权）；选【取消】保持只读。"
+      );
+      if (force) {
+        // 强制接管带 token（统一鉴权 helper 已处理密码登录），旧页面将失去自动刷新权
+        const result2 = await postControl("/api/control/claim", { force: true });
+        if (result2.ok) {
+          showStatus("已强制接管自动刷新（旧设备已让出）");
+          return true;
+        }
+        // 401 且重试失败：可能是密码错，提示更准确
+        if (result2.data && result2.data.error === "auth") {
+          showError("需要访问密码才能强制接管。请在页面顶部「访问密码」处设置/确认密码后重试。");
+          return false;
+        }
+        showError("强制接管失败：" + (result2.data.error || "未知错误"));
+        return false;
+      }
+      showError("另一台设备已开启自动刷新，本页面暂时只能查看最新结果。");
+      return false;
+    }
+
+    async function heartbeatControl() {
+      const result = await postControl("/api/control/heartbeat");
+      if (!result.ok) {
+        setAutoRefreshEnabled(false, { skipRelease: true });
+        if (result.data && result.data.error === "auth") {
+          showError("需要访问密码才能保持自动刷新。请在页面顶部「访问密码」处确认密码。");
+        } else {
+          showError("自动刷新控制权已被其他设备占用。");
+        }
+        return false;
+      }
+      return true;
+    }
+
+    async function releaseAutoRefreshControl() {
+      await postControl("/api/control/release");
+    }
+
+    function clearAutoRefreshTimers() {
+      if (autoRefreshTimer) window.clearTimeout(autoRefreshTimer);
+      if (autoRefreshCountdownTimer) window.clearInterval(autoRefreshCountdownTimer);
+      if (controlHeartbeatTimer) window.clearInterval(controlHeartbeatTimer);
+      autoRefreshTimer = null;
+      autoRefreshCountdownTimer = null;
+      controlHeartbeatTimer = null;
+    }
+
+    function updateAutoRefreshStatus() {
+      if (!autoRefreshToggle.checked || !autoRefreshNextAt) {
+        autoRefreshStatus.textContent = "自动刷新：关";
+        return;
+      }
+      const left = Math.max(0, autoRefreshNextAt - Date.now());
+      const minutes = Math.floor(left / 60000);
+      const seconds = Math.floor((left % 60000) / 1000);
+      autoRefreshStatus.textContent = `下次 ${minutes}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    function skipBusyAutoRefresh() {
+      showStatus("本次自动刷新已跳过，后台解析完成前不会排队新的刷新。");
+      scheduleAutoRefresh();
+    }
+
+    function scheduleAutoRefresh() {
+      clearAutoRefreshTimers();
+      if (!autoRefreshToggle.checked) {
+        updateAutoRefreshStatus();
+        return;
+      }
+      autoRefreshNextAt = Date.now() + AUTO_REFRESH_MS;
+      updateAutoRefreshStatus();
+      autoRefreshCountdownTimer = window.setInterval(updateAutoRefreshStatus, 1000);
+      controlHeartbeatTimer = window.setInterval(heartbeatControl, CONTROL_HEARTBEAT_MS);
+      autoRefreshTimer = window.setTimeout(async () => {
+        if (refreshInFlight) {
+          skipBusyAutoRefresh();
+          return;
+        }
+        if (!await heartbeatControl()) return;
+        await refreshFromServer();
+        scheduleAutoRefresh();
+      }, AUTO_REFRESH_MS);
+    }
+
+    async function setAutoRefreshEnabled(enabled, options = {}) {
+      // App 模式：自动刷新/控制锁只归 exe 网页，App 强制关闭不参与
+      if (APP_MODE) {
+        autoRefreshToggle.checked = false;
+        localStorage.setItem("bidking-auto-refresh", "0");
+        scheduleAutoRefresh();
+        return;
+      }
+      if (enabled && !await claimAutoRefreshControl()) {
+        autoRefreshToggle.checked = false;
+        localStorage.setItem("bidking-auto-refresh", "0");
+        updateAutoRefreshStatus();
+        return;
+      }
+      if (!enabled && !options.skipRelease) {
+        await releaseAutoRefreshControl();
+      }
+      autoRefreshToggle.checked = Boolean(enabled);
+      localStorage.setItem("bidking-auto-refresh", autoRefreshToggle.checked ? "1" : "0");
+      scheduleAutoRefresh();
+    }
+
+    function getSelectedUid() {
+      return uidInput.value.trim();
+    }
+
+    function setSelectedUid(uid) {
+      uidInput.value = String(uid || "").trim();
+      localStorage.setItem("bidking-uid", getSelectedUid());
+    }
+
+    function setUidVisible(visible) {
+      uidInput.type = visible ? "text" : "password";
+      uidVisibilityToggle.textContent = visible ? "隐藏 UID" : "显示 UID";
+      localStorage.setItem("bidking-uid-visible", visible ? "1" : "0");
+    }
+
+    // 全局设置（App 内跨页联动）：App 模式读写全局 key，电脑模式读写本页 key
+    const GLOBAL_THEME_KEY = "bidking-global-theme";
+    const GLOBAL_PROFIT_KEY = "bidking-global-profit-colors";
+
+    function applyTheme(theme) {
+      const nextTheme = theme === "dark" ? "dark" : "light";
+      document.documentElement.dataset.theme = nextTheme;
+      themeToggle.textContent = nextTheme === "dark" ? "浅色" : "深色";
+      localStorage.setItem(APP_MODE ? GLOBAL_THEME_KEY : "bidking-theme", nextTheme);
+    }
+
+    function applyProfitColorMode(mode) {
+      const nextMode = mode === "inverted" ? "inverted" : "normal";
+      document.documentElement.dataset.profitColors = nextMode;
+      profitColorToggle.textContent = nextMode === "inverted" ? "红盈绿亏" : "绿盈红亏";
+      localStorage.setItem(APP_MODE ? GLOBAL_PROFIT_KEY : "bidking-profit-colors", nextMode);
+    }
+
+    // 初始化也读全局 key（App 模式下三页共享同一设置）
+    function initTheme() {
+      const stored = localStorage.getItem(APP_MODE ? GLOBAL_THEME_KEY : "bidking-theme") || "light";
+      applyTheme(stored);
+    }
+    function initProfitMode() {
+      const stored = localStorage.getItem(APP_MODE ? GLOBAL_PROFIT_KEY : "bidking-profit-colors") || "normal";
+      applyProfitColorMode(stored);
+    }
+
+    function captureCurrentSummary() {
+      previousRefreshSummary = report ? summarizeRows(filteredGames()) : null;
+    }
+
+    function validateReport(data) {
+      if (!data || !Array.isArray(data.games) || !data.summary || !data.meta) {
+        throw new Error("不是有效的 BidKing result.json");
+      }
+      if (!Array.isArray(data.silver_samples)) data.silver_samples = [];
+      return data;
+    }
+
+    function loadFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function () {
+        try {
+          report = validateReport(JSON.parse(reader.result));
+          clearError();
+          render(file.name);
+        } catch (error) {
+          report = null;
+          showError(error.message || "JSON 读取失败");
+        }
+      };
+      reader.onerror = function () {
+        showError("文件读取失败");
+      };
+      reader.readAsText(file, "utf-8");
+    }
+
+    async function loadReportFromServer(showMissing) {
+      try {
+        // 不带 cache:"no-store"（2026-08-30）：服务端静态文件支持 ETag/304，
+        // result.json 没重新解析时 304 秒回，公网/手机重开页面不再重拖全量
+        const response = await fetch("result.json");
+        if (!response.ok) {
+          if (response.status === 401) {
+            // 公网访客还没通过配对/密码：提示去电脑端同意，而不是误报“没有 result.json”
+            if (showMissing) showError("⛔ 还没有访问权限：公网查看需要在电脑端「安全与配对」点「同意」（或输对访问密码），然后刷新本页。");
+            return false;
+          }
+          if (showMissing) showError("还没有 result.json，请点击“实时刷新”生成。");
+          return false;
+        }
+        report = validateReport(await response.json());
+        window.__hasGames = !!(report && report.games && report.games.length);
+        if (!getSelectedUid() && report.meta && report.meta.uid) {
+          setSelectedUid(report.meta.uid);
+        }
+        clearError();
+        render("result.json");
+        showStatus("已读取最新 result.json");
+        return true;
+      } catch (error) {
+        if (showMissing) showError("无法自动读取 result.json。请确认从 EXE 打开的网页，或手动选择 JSON。");
+        return false;
+      }
+    }
+
+    async function refreshFromServer() {
+      if (refreshInFlight) return false;
+      if (isLockedByOther()) {
+        showError("另一台设备正在自动刷新，本页面暂时不能触发解析。");
+        return false;
+      }
+      refreshInFlight = true;
+      captureCurrentSummary();
+      refreshBtn.disabled = true;
+      showStatus("正在解析日志...");
+      clearError();
+      try {
+        const headers = { "Content-Type": "application/json" };
+        // 设了访问密码时，控制类请求需带会话令牌（否则后端 401）
+        // 本机访问 getControlToken() 返回 "local"，无需令牌（后端已对本机放行）
+        if (passEnabled) {
+          const token = await getControlToken();
+          if (!token) throw new Error("需访问密码");
+          if (token !== "local") headers["X-Auth-Token"] = token;
+        }
+        const response = await fetch("/api/refresh", {
+          method: "POST",
+          cache: "no-store",
+          headers,
+          body: JSON.stringify({ uid: getSelectedUid(), client_id: clientId })
+        });
+        if (response.status === 423) {
+          applyControlLock(await response.json().catch(() => ({})));
+          throw new Error("locked");
+        }
+        if (!response.ok) throw new Error("刷新失败");
+        await pollRefreshStatus();
+        return true;
+      } catch (error) {
+        if (error && error.message === "locked") {
+          showError("另一台设备正在自动刷新，本页面暂时不能触发解析。");
+        } else if (error && error.message === "需访问密码") {
+          showError("本服务已设置访问密码，请输入正确密码后重试。");
+        } else {
+          showError("实时刷新失败。请确认本页面是通过 BidKing解析器.exe 打开的。");
+        }
+        refreshInFlight = false;
+        refreshBtn.disabled = isLockedByOther();
+        return false;
+      }
+    }
+
+    async function loadPlayerCandidates() {
+      loadPlayersBtn.disabled = true;
+      clearError();
+      showStatus("正在从日志读取 UID...");
+      try {
+        const response = await fetch(`/api/players?client_id=${encodeURIComponent(clientId)}`, { cache: "no-store" });
+        if (response.status === 423) {
+          applyControlLock(await response.json().catch(() => ({})));
+          throw new Error("locked");
+        }
+        if (!response.ok) throw new Error("读取失败");
+        const data = await response.json();
+        const players = Array.isArray(data.players) ? data.players : [];
+        playerSelect.innerHTML = '<option value="">选择日志候选</option>' + players.map(player => {
+          const uid = String(player.uid || "");
+          const name = player.name ? `${player.name} ` : "";
+          const count = Number(player.count || 0);
+          const label = `${name}${uid}${count ? ` (${fmt(count)}次)` : ""}`;
+          return `<option value="${escapeHtml(uid)}">${escapeHtml(label)}</option>`;
+        }).join("");
+        if (players.length) {
+          setSelectedUid(players[0].uid);
+          playerSelect.value = String(players[0].uid || "");
+          showStatus(`已读取 ${fmt(players.length)} 个 UID 候选`);
+          return;
+        }
+        showError("没有从日志里读取到 UID 候选，可手动输入玩家 UID。");
+      } catch (error) {
+        showError("读取 UID 失败。请确认通过 EXE 打开页面，且能找到 Player.log。");
+      } finally {
+        loadPlayersBtn.disabled = isLockedByOther();
+      }
+    }
+
+    async function pollRefreshStatus() {
+      try {
+        const response = await fetch("/api/status", { cache: "no-store" });
+        if (!response.ok) throw new Error("状态读取失败");
+        const state = await response.json();
+        if (state.status === "running") {
+          showStatus("后台解析中，页面可继续查看旧结果...");
+          window.setTimeout(() => { pollRefreshStatus().catch(() => { refreshInFlight = false; refreshBtn.disabled = isLockedByOther(); }); }, 1200);
+          return;
+        }
+        if (state.status === "done") {
+          await loadReportFromServer(true);
+          await loadSaveWarning();
+          refreshInFlight = false;
+          refreshBtn.disabled = isLockedByOther();
+          return;
+        }
+        if (state.status === "error") {
+          showError(`解析失败，退出码: ${state.code || 1}`);
+          refreshInFlight = false;
+          refreshBtn.disabled = isLockedByOther();
+          return;
+        }
+        refreshInFlight = false;
+        refreshBtn.disabled = isLockedByOther();
+      } catch (e) {
+        showError("轮询状态失败：" + (e.message || e));
+        refreshInFlight = false;
+        refreshBtn.disabled = isLockedByOther();
+      }
+    }
+
+    function filteredGames() {
+      if (!report) return [];
+      const limit = readLimit();
+      const fromTs = readTimeLimit("fromTime");
+      const toTs = readTimeLimit("toTime");
+      const rows = report.games
+        .filter(game => mode === "all" || game.is_win)
+        .filter(game => prefixes.has(normalizeMapPrefix(game.map_id)))
+        .filter(game => fromTs === null || Number(game.ts || 0) >= fromTs)
+        .filter(game => toTs === null || Number(game.ts || 0) <= toTs)
+        .filter(game => {
+          const filter = document.getElementById("profitFilter").value;
+          const profit = Number(game.my_profit || 0);
+          if (filter === "profit") return profit > 0;
+          if (filter === "loss") return profit < 0;
+          return true;
+        });
+      return Number.isFinite(limit) && limit > 0 ? rows.slice(0, limit) : rows;
+    }
+
+    function readLimit() {
+      const limit = Number(document.getElementById("limitInput").value);
+      return Number.isFinite(limit) && limit > 0 ? limit : null;
+    }
+
+    function readTimeLimit(id) {
+      const value = document.getElementById(id).value;
+      if (!value) return null;
+      const millis = new Date(value).getTime();
+      return Number.isFinite(millis) ? Math.floor(millis / 1000) : null;
+    }
+
+    function summarizeRows(rows) {
+      const wins = rows.filter(game => game.is_win);
+      const profitableWins = rows.filter(game => game.is_win && Number(game.my_profit || 0) > 0);
+      const value = wins.reduce((sum, game) => sum + Number(game.actual_value || 0), 0);
+      const bid = wins.reduce((sum, game) => sum + Number(game.final_bid || 0), 0);
+      const itemCost = rows.reduce((sum, game) => sum + Number(game.item_cost || 0), 0);
+      const unpricedItemCount = rows.reduce((sum, game) => sum + (game.items_used || []).filter(item => Number(item.cost || 0) <= 0).length, 0);
+      const ticket = rows.reduce((sum, game) => sum + Number(game.ticket || 0), 0);
+      const profit = rows.reduce((sum, game) => sum + Number(game.my_profit || 0), 0);
+      const itemRows = rows.filter(game => Number(game.item_cost || 0) > 0).length;
+      const ticketRows = rows.filter(game => Number(game.ticket || 0) > 0).length;
+      return {
+        games: rows.length,
+        wins: wins.length,
+        losses: rows.length - wins.length,
+        win_rate: rows.length ? wins.length / rows.length * 100 : 0,
+        profit_rate: wins.length ? profitableWins.length / wins.length * 100 : 0,
+        value,
+        bid,
+        itemCost,
+        unpricedItemCount,
+        ticket,
+        profit,
+        itemRows,
+        ticketRows,
+        dividend: profit - (value - bid - itemCost - ticket)
+      };
+    }
+
+    function renderDelta(id, value, suffix = "") {
+      const element = document.getElementById(id);
+      if (!element) return;
+      if (!previousRefreshSummary || !Number.isFinite(value) || value === 0) {
+        element.textContent = previousRefreshSummary ? "较上次 0" + suffix : "";
+        element.className = "delta";
+        return;
+      }
+      element.textContent = `较上次 ${value > 0 ? "+" : ""}${suffix === "%" ? value.toFixed(1) : fmt(value)}${suffix}`;
+      element.className = "delta " + (value > 0 ? "good" : "bad");
+    }
+
+    function renderSummaryDeltas(summary) {
+      if (!previousRefreshSummary) {
+        ["deltaGames", "deltaRecord", "deltaRate", "deltaProfit", "deltaDividend"].forEach(id => {
+          const element = document.getElementById(id);
+          if (element) {
+            element.textContent = "";
+            element.className = "delta";
+          }
+        });
+        return;
+      }
+      renderDelta("deltaGames", summary.games - previousRefreshSummary.games);
+      renderDelta("deltaRecord", summary.wins - previousRefreshSummary.wins);
+      renderDelta("deltaRate", rateMode === 'profit' ? summary.profit_rate - previousRefreshSummary.profit_rate : summary.win_rate - previousRefreshSummary.win_rate, "%");
+      renderDelta("deltaProfit", summary.profit - previousRefreshSummary.profit);
+      renderDelta("deltaDividend", summary.dividend - previousRefreshSummary.dividend);
+    }
+
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function buildProfitTrend(rows) {
+      let total = 0;
+      return rows
+        .slice()
+        .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0))
+        .map(game => {
+          total += Number(game.my_profit || 0);
+          return { ts: Number(game.ts || 0), time: game.time || "", value: total };
+        });
+    }
+
+    // 走势图画布宽度兜底：App / 窄屏下 getBoundingClientRect 可能拿到 0（元素被隐藏或布局未稳），
+    // 逐级回退到 clientWidth / 父容器宽度，保证 canvas 有位图可画（否则会整块空白）。
+    function trendCanvasWidth(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const parent = canvas.parentElement;
+      const fallback = canvas.clientWidth || (parent ? parent.clientWidth : 0) || 960;
+      return Math.max(320, Math.floor(rect.width || fallback));
+    }
+
+    function renderProfitTrend(rows) {
+      const ctx = profitTrendCanvas.getContext("2d");
+      const ratio = window.devicePixelRatio || 1;
+      const width = trendCanvasWidth(profitTrendCanvas);
+      const height = 210;
+      profitTrendCanvas.width = Math.floor(width * ratio);
+      profitTrendCanvas.height = Math.floor(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const trend = buildProfitTrend(rows);
+      profitTrendNote.textContent = trend.length ? `${fmt(trend.length)} 场累计收益曲线` : "没有可绘制的数据";
+
+      const pad = { left: 56, right: 18, top: 18, bottom: 34 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+      const axis = cssVar("--line") || "#d8d0c2";
+      const muted = cssVar("--muted") || "#69717d";
+      const good = cssVar("--profit-good") || "#116248";
+      const bad = cssVar("--profit-bad") || "#a33d2a";
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = axis;
+      ctx.globalAlpha = 0.55;
+      for (let i = 0; i <= 3; i += 1) {
+        const y = pad.top + (plotH / 3) * i;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(width - pad.right, y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      if (!trend.length) {
+        ctx.fillStyle = muted;
+        ctx.font = "700 13px Microsoft YaHei, Segoe UI, sans-serif";
+        ctx.fillText("暂无收益走势", pad.left, pad.top + 28);
+        return;
+      }
+
+      const values = trend.map(point => point.value);
+      let min = Math.min(0, ...values);
+      let max = Math.max(0, ...values);
+      if (min === max) {
+        min -= 1;
+        max += 1;
+      }
+      const yFor = value => pad.top + (max - value) / (max - min) * plotH;
+      const xFor = index => pad.left + (trend.length === 1 ? plotW : index / (trend.length - 1) * plotW);
+      const zeroY = yFor(0);
+
+      ctx.strokeStyle = muted;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, zeroY);
+      ctx.lineTo(width - pad.right, zeroY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      renderProfitTrendSegments(ctx, trend, xFor, yFor, good, bad);
+
+      const last = trend[trend.length - 1];
+      const lastX = xFor(trend.length - 1);
+      const lastY = yFor(last.value);
+      ctx.fillStyle = last.value >= 0 ? good : bad;
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = muted;
+      ctx.font = "700 12px Microsoft YaHei, Segoe UI, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(signed(max), 8, pad.top + 5);
+      ctx.fillText(signed(min), 8, height - pad.bottom + 4);
+      ctx.textAlign = "right";
+      ctx.fillText(`当前 ${signed(last.value)}`, width - pad.right, height - 10);
+    }
+
+    function profitSegmentColor(current, previous, good, bad) {
+      return current.value >= previous.value ? good : bad;
+    }
+
+    function latestSilverSample(data = report) {
+      const samples = Array.isArray(data && data.silver_samples) ? data.silver_samples : [];
+      const sorted = samples
+        .filter(sample => Number.isFinite(Number(sample.value)))
+        .slice()
+        .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+      return sorted.length ? sorted[sorted.length - 1] : null;
+    }
+
+    function buildSilverTrend(data = report) {
+      const samples = Array.isArray(data && data.silver_samples) ? data.silver_samples : [];
+      const sorted = samples
+        .filter(sample => Number.isFinite(Number(sample.value)))
+        .slice()
+        .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+      if (sorted.length <= 1800) return sorted.map(sample => ({
+        ts: Number(sample.ts || 0),
+        time: sample.time || "",
+        value: Number(sample.value || 0)
+      }));
+      const step = Math.ceil(sorted.length / 1800);
+      const reduced = [];
+      for (let i = 0; i < sorted.length; i += step) reduced.push(sorted[i]);
+      if (reduced[reduced.length - 1] !== sorted[sorted.length - 1]) reduced.push(sorted[sorted.length - 1]);
+      return reduced.map(sample => ({
+        ts: Number(sample.ts || 0),
+        time: sample.time || "",
+        value: Number(sample.value || 0)
+      }));
+    }
+
+    function renderSilverTrend() {
+      const ctx = silverTrendCanvas.getContext("2d");
+      const ratio = window.devicePixelRatio || 1;
+      const width = trendCanvasWidth(silverTrendCanvas);
+      const height = 210;
+      silverTrendCanvas.width = Math.floor(width * ratio);
+      silverTrendCanvas.height = Math.floor(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const trend = buildSilverTrend();
+      const latest = latestSilverSample(report);
+      if (!trend.length) {
+        silverTrendNote.textContent = "日志未记录银币";
+      } else {
+        const latestTime = latest && latest.time ? `，最新 ${latest.time}` : "";
+        silverTrendNote.textContent = `${fmt((report.silver_samples || []).length)} 个采样${latestTime}`;
+      }
+
+      const pad = { left: 64, right: 18, top: 18, bottom: 34 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+      const axis = cssVar("--line") || "#d8d0c2";
+      const muted = cssVar("--muted") || "#69717d";
+      const accent = cssVar("--accent") || "#1f7667";
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = axis;
+      ctx.globalAlpha = 0.55;
+      for (let i = 0; i <= 3; i += 1) {
+        const y = pad.top + (plotH / 3) * i;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(width - pad.right, y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      if (!trend.length) {
+        ctx.fillStyle = muted;
+        ctx.font = "700 13px Microsoft YaHei, Segoe UI, sans-serif";
+        ctx.fillText("暂无银币走势", pad.left, pad.top + 28);
+        return;
+      }
+
+      const values = trend.map(point => point.value);
+      let min = Math.min(...values);
+      let max = Math.max(...values);
+      if (min === max) {
+        const padding = Math.max(1, Math.round(Math.abs(min) * 0.02));
+        min = Math.max(0, min - padding);
+        max += padding;
+        if (min === max) max = min + 1;
+      }
+      const yFor = value => pad.top + (max - value) / (max - min) * plotH;
+      const xFor = index => pad.left + (trend.length === 1 ? plotW : index / (trend.length - 1) * plotW);
+
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      trend.forEach((point, index) => {
+        const x = xFor(index);
+        const y = yFor(point.value);
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      const last = trend[trend.length - 1];
+      const lastX = xFor(trend.length - 1);
+      const lastY = yFor(last.value);
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = muted;
+      ctx.font = "700 12px Microsoft YaHei, Segoe UI, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(fmt(max), 8, pad.top + 5);
+      ctx.fillText(fmt(min), 8, height - pad.bottom + 4);
+    }
+
+    function renderProfitTrendSegments(ctx, trend, xFor, yFor, good, bad) {
+      ctx.lineWidth = 3;
+      if (trend.length === 1) {
+        ctx.fillStyle = trend[0].value >= 0 ? good : bad;
+        ctx.beginPath();
+        ctx.arc(xFor(0), yFor(trend[0].value), 4, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+      }
+      for (let index = 1; index < trend.length; index += 1) {
+        const previous = trend[index - 1];
+        const point = trend[index];
+        ctx.strokeStyle = profitSegmentColor(point, previous, good, bad);
+        ctx.beginPath();
+        ctx.moveTo(xFor(index - 1), yFor(previous.value));
+        ctx.lineTo(xFor(index), yFor(point.value));
+        ctx.stroke();
+      }
+    }
+
+    function buildValueTrend(rows) {
+      return rows
+        .slice()
+        .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0))
+        .map(game => ({ ts: Number(game.ts || 0), time: game.time || "", value: Number(game.actual_value || 0) }));
+    }
+
+    function renderValueTrend(rows) {
+      const ctx = valueTrendCanvas.getContext("2d");
+      const ratio = window.devicePixelRatio || 1;
+      const width = trendCanvasWidth(valueTrendCanvas);
+      const height = 210;
+      valueTrendCanvas.width = Math.floor(width * ratio);
+      valueTrendCanvas.height = Math.floor(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const trend = buildValueTrend(rows);
+      valueTrendNote.textContent = trend.length ? `${fmt(trend.length)} 场拍品价值变化` : "没有可绘制的数据";
+
+      const pad = { left: 64, right: 18, top: 18, bottom: 34 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+      const axis = cssVar("--line") || "#d8d0c2";
+      const muted = cssVar("--muted") || "#69717d";
+      const accent = cssVar("--value-line") || "#2563eb";
+      const accent2 = cssVar("--value-line-2") || "#f59e0b";
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = axis;
+      ctx.globalAlpha = 0.55;
+      for (let i = 0; i <= 3; i += 1) {
+        const y = pad.top + (plotH / 3) * i;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(width - pad.right, y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      if (!trend.length) {
+        ctx.fillStyle = muted;
+        ctx.font = "700 13px Microsoft YaHei, Segoe UI, sans-serif";
+        ctx.fillText("暂无拍品价值走势", pad.left, pad.top + 28);
+        return;
+      }
+
+      const values = trend.map(point => point.value);
+      let min = Math.min(...values);
+      let max = Math.max(...values);
+      if (min === max) {
+        min = Math.max(0, min - 1);
+        max += 1;
+      }
+      const yFor = value => pad.top + (max - value) / (max - min) * plotH;
+      const xFor = index => pad.left + (trend.length === 1 ? plotW : index / (trend.length - 1) * plotW);
+
+      const gradient = ctx.createLinearGradient(0, pad.top, width, pad.top);
+      gradient.addColorStop(0, accent2);
+      gradient.addColorStop(1, accent);
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      trend.forEach((point, index) => {
+        const x = xFor(index);
+        const y = yFor(point.value);
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      const last = trend[trend.length - 1];
+      const lastX = xFor(trend.length - 1);
+      const lastY = yFor(last.value);
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = muted;
+      ctx.font = "700 12px Microsoft YaHei, Segoe UI, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(fmt(max), 8, pad.top + 5);
+      ctx.fillText(fmt(min), 8, height - pad.bottom + 4);
+      ctx.textAlign = "right";
+      ctx.fillText(`当前 ${fmt(last.value)}`, width - pad.right, height - 10);
+    }
+
+    function detailAmount(value, incomeWhenPositive) {
+      const n = Number(value || 0);
+      const cls = incomeWhenPositive ? (n >= 0 ? "income" : "expense") : (n > 0 ? "expense" : "income");
+      return `<span class="detail-value ${cls}">${signed(n)}</span>`;
+    }
+
+    function buildTicketBreakdown(rows) {
+      const groups = new Map();
+      rows.forEach(game => {
+        const ticket = Number(game.ticket || 0);
+        if (!ticket) return;
+        const prefix = normalizeMapPrefix(game.map_id);
+        const current = groups.get(prefix) || { count: 0, amount: 0 };
+        current.count += 1;
+        current.amount += ticket;
+        groups.set(prefix, current);
+      });
+      return Array.from(groups.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([prefix, group]) => ({
+          label: `${mapLabels[prefix] || "地图"}(${prefix}xx) ×${group.count}局`,
+          amount: group.amount
+        }));
+    }
+
+    function buildUnpricedItemBreakdown(rows) {
+      const groups = new Map();
+      rows.forEach(game => (game.items_used || []).forEach(item => {
+        if (Number(item.cost || 0) > 0) return;
+        const name = item.name || "未知道具";
+        groups.set(name, (groups.get(name) || 0) + 1);
+      }));
+      return Array.from(groups.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-CN"))
+        .map(([name, count]) => ({ name, count }));
+    }
+
+    function renderProfitDetail(rows) {
+      const summary = summarizeRows(rows);
+      const tickets = buildTicketBreakdown(rows);
+      const unpricedItems = buildUnpricedItemBreakdown(rows);
+      const ticketHtml = tickets.map(item => `
+        <div class="detail-sub">
+          <span>${escapeHtml(item.label)}</span>
+          <span>-${fmt(item.amount)}</span>
+        </div>
+      `).join("");
+      const unpricedHtml = unpricedItems.map(item => `
+        <div class="detail-sub">
+          <span>${escapeHtml(item.name)}</span>
+          <span>${fmt(item.count)} 次</span>
+        </div>
+      `).join("");
+      profitDetailBody.innerHTML = `
+        <div class="detail-row">
+          <span class="detail-label">拍到容器总价值（${fmt(summary.wins)}局）</span>
+          ${detailAmount(summary.value, true)}
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">出价支出（${fmt(summary.wins)}局）</span>
+          ${detailAmount(-summary.bid, true)}
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">道具成本（${fmt(summary.itemRows)}局）</span>
+          ${detailAmount(-summary.itemCost, true)}
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">无法计价道具</span>
+          <span>${fmt(summary.unpricedItemCount)} 次</span>
+        </div>
+        ${unpricedHtml}
+        <div class="detail-row">
+          <span class="detail-label">门票支出</span>
+          ${detailAmount(-summary.ticket, true)}
+        </div>
+        ${ticketHtml}
+        <div class="detail-row">
+          <span class="detail-label">分红返还</span>
+          ${detailAmount(summary.dividend, true)}
+        </div>
+        <div class="detail-row detail-total">
+          <span class="detail-label">合计</span>
+          ${detailAmount(summary.profit, true)}
+        </div>
+      `;
+    }
+
+    function openProfitDetail() {
+      if (!report) return;
+      renderProfitDetail(filteredGames());
+      profitDetailModal.classList.add("open");
+      profitDetailModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeProfitDetail() {
+      profitDetailModal.classList.remove("open");
+      profitDetailModal.setAttribute("aria-hidden", "true");
+    }
+
+    function collectHighValueItems(rows, thresholdWan) {
+      const threshold = Number(thresholdWan || 0) * 10000;
+      const groups = new Map();
+      rows.filter(game => game.is_win).forEach(game => {
+        (game.won_items || []).forEach(item => {
+          const value = Number(item.value || 0);
+          if (value < threshold) return;
+          const name = item.name || "?";
+          const current = groups.get(name) || { name, count: 0 };
+          current.count += Number(item.count || 1);
+          groups.set(name, current);
+        });
+      });
+      return Array.from(groups.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN"));
+    }
+
+    function renderHighValueModal() {
+      const items = collectHighValueItems(filteredGames(), Number(highValueInput.value || 0));
+      if (!items.length) {
+        highValueBody.innerHTML = '<div class="empty">当前范围内没有达到价值下限的拍下物品</div>';
+        return;
+      }
+      highValueBody.innerHTML = `<table class="detail-table"><colgroup><col><col style="width:96px"></colgroup><thead><tr><th>物品名</th><th>数量</th></tr></thead><tbody>${items.map(item => `
+        <tr><td>${escapeHtml(item.name)}</td><td>${fmt(item.count)}</td></tr>
+      `).join("")}</tbody></table>`;
+    }
+
+    function openHighValueModal() {
+      if (!report) return;
+      renderHighValueModal();
+      highValueModal.classList.add("open");
+      highValueModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeHighValueModal() {
+      highValueModal.classList.remove("open");
+      highValueModal.setAttribute("aria-hidden", "true");
+    }
+
+    function toDateTimeLocal(date) {
+      const pad = value => String(value).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function setDefaultStatsRange() {
+      if (statsFromTime.value || statsToTime.value) return;
+      const end = new Date();
+      const start = new Date(end.getTime() - 3 * 60 * 60 * 1000);
+      statsFromTime.value = toDateTimeLocal(start);
+      statsToTime.value = toDateTimeLocal(end);
+    }
+
+    function renderStatsModal() {
+      const fromTs = statsFromTime.value ? Math.floor(new Date(statsFromTime.value).getTime() / 1000) : null;
+      const toTs = statsToTime.value ? Math.floor(new Date(statsToTime.value).getTime() / 1000) : null;
+      const rows = filteredGames().filter(game => {
+        const ts = Number(game.ts || 0);
+        return (fromTs === null || ts >= fromTs) && (toTs === null || ts <= toTs);
+      });
+      const won = rows.filter(game => game.is_win);
+      const profitRows = won.filter(game => Number(game.my_profit || 0) > 0);
+      const lossRows = won.filter(game => Number(game.my_profit || 0) < 0);
+      const profitAmount = profitRows.reduce((sum, game) => sum + Number(game.my_profit || 0), 0);
+      const lossAmount = lossRows.reduce((sum, game) => sum + Number(game.my_profit || 0), 0);
+      const avgValue = won.length ? won.reduce((sum, game) => sum + Number(game.actual_value || 0), 0) / won.length : 0;
+      statsBody.innerHTML = `
+        <div class="detail-row"><span class="detail-label">拍下局盈亏局数比例</span><span>${fmt(profitRows.length)} / ${fmt(lossRows.length)}</span></div>
+        <div class="detail-row"><span class="detail-label">拍下局盈利总额</span>${detailAmount(profitAmount, true)}</div>
+        <div class="detail-row"><span class="detail-label">拍下局亏损总额</span>${detailAmount(lossAmount, true)}</div>
+        <div class="detail-row"><span class="detail-label">时间段拍品价值平均数</span><span>${fmt(Math.round(avgValue))}</span></div>
+      `;
+    }
+
+    function openStatsModal() {
+      if (!report) return;
+      setDefaultStatsRange();
+      renderStatsModal();
+      statsModal.classList.add("open");
+      statsModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeStatsModal() {
+      statsModal.classList.remove("open");
+      statsModal.setAttribute("aria-hidden", "true");
+    }
+
+    /* 拿仓率 / 盈亏率 切换状态 */
+    let rateMode = 'win'; // 'win' = 拿仓率, 'profit' = 盈亏率
+    function toggleRateMode() {
+      rateMode = rateMode === 'win' ? 'profit' : 'win';
+      const label = document.getElementById('rateLabel');
+      const valueEl = document.getElementById('sumRate');
+      const rows = filteredGames();
+      if (!rows || !rows.length) return;
+      const summary = summarizeRows(rows);
+      if (rateMode === 'profit') {
+        label.innerHTML = '盈亏率 <span class="rate-toggle active" id="rateToggle" title="切换拿仓率">⇌</span>';
+        valueEl.textContent = `${Number(summary.profit_rate || 0).toFixed(1)}%`;
+        document.getElementById('rateToggle').onclick = toggleRateMode;
+      } else {
+        label.innerHTML = '拿仓率 <span class="rate-toggle" id="rateToggle" title="切换盈亏率">⇌</span>';
+        valueEl.textContent = `${Number(summary.win_rate || 0).toFixed(1)}%`;
+        document.getElementById('rateToggle').onclick = toggleRateMode;
+      }
+      renderSummaryDeltas(summary);
+    }
+
+    function renderCards(rows) {
+      const summary = summarizeRows(rows);
+      const total = (report.summary || {}).games || (report.games || []).length;
+      document.getElementById("sumGames").textContent = fmt(summary.games);
+      document.getElementById("sumRecord").textContent = `${fmt(summary.wins)} / ${fmt(summary.losses)}`;
+      // 拿仓率/盈亏率 根据当前 mode 渲染
+      const sumRateEl = document.getElementById("sumRate");
+      if (rateMode === 'profit') {
+        sumRateEl.textContent = `${Number(summary.profit_rate || 0).toFixed(1)}%`;
+      } else {
+        sumRateEl.textContent = `${Number(summary.win_rate || 0).toFixed(1)}%`;
+      }
+      const profit = document.getElementById("sumProfit");
+      profit.textContent = signed(summary.profit);
+      profit.className = "value " + (Number(summary.profit || 0) >= 0 ? "good" : "bad");
+      const dividend = document.getElementById("sumDividend");
+      dividend.textContent = signed(summary.dividend);
+      dividend.className = "value " + (Number(summary.dividend || 0) >= 0 ? "good" : "bad");
+      const silver = latestSilverSample(report);
+      const silverEl = document.getElementById("sumSilverCoin");
+      silverEl.textContent = silver ? fmt(silver.value) : "--";
+      silverEl.className = "value";
+      renderSummaryDeltas(summary);
+
+      const meta = report.meta || {};
+      document.getElementById("meta").innerHTML = [
+        `当前统计: ${rows.length} / ${fmt(total)} 场`
+      ].join("<br>");
+    }
+
+    function buildMapValueStats(rows) {
+      const groups = Object.entries(mapLabels).map(([prefix, label]) => ({
+        prefix: Number(prefix),
+        label,
+        count: 0,
+        total: 0,
+        max: 0,
+        min: 0
+      }));
+      const groupByPrefix = new Map(groups.map(group => [group.prefix, group]));
+      rows.forEach(game => {
+        const value = Number(game.actual_value || 0);
+        if (!Number.isFinite(value) || value <= 0) return;
+        const group = groupByPrefix.get(normalizeMapPrefix(game.map_id));
+        if (!group) return;
+        group.count += 1;
+        group.total += value;
+        group.max = group.count === 1 ? value : Math.max(group.max, value);
+        group.min = group.count === 1 ? value : Math.min(group.min, value);
+      });
+      return groups.map(group => ({
+        ...group,
+        avg: group.count ? Math.round(group.total / group.count) : 0
+      }));
+    }
+
+    function renderMapValueStats(rows) {
+      const box = document.getElementById("mapValueStats");
+      if (!box) return;
+      const stats = buildMapValueStats(rows).filter(row => row.count > 0);
+      if (!stats.length) {
+        box.innerHTML = '<div class="inv-empty">当前筛选条件下没有已参与的地图</div>';
+        return;
+      }
+      box.innerHTML = `<table><thead><tr><th>地图大类</th><th>场次</th><th>最高拍品</th><th>最低拍品</th><th>平均拍品</th></tr></thead><tbody>${stats.map(row => `
+        <tr>
+          <td>${escapeHtml(row.label)}</td>
+          <td>${fmt(row.count)}</td>
+          <td>${fmt(row.max)}</td>
+          <td>${fmt(row.min)}</td>
+          <td>${fmt(row.avg)}</td>
+        </tr>`).join("")}</tbody></table>`;
+    }
+
+    const LOW_STOCK = 10;  // 道具数量≤此值视为低库存，提醒用户
+    // 低库存提醒开关（默认关；用户手动开启时做权限自检 + 保活提示）
+    let lowStockNotifyEnabled = localStorage.getItem("bidking-lowstock-notify") === "1";
+    function isRemoteAccess() {
+      // 仅「同局域网 IP / ngrok 域名」视为远程访问（手机端）；localhost 为本地桌面，不弹提醒
+      const h = location.hostname;
+      return h !== "localhost" && h !== "127.0.0.1" && h !== "[::1]";
+    }
+    function renderInventory() {
+      const box = document.getElementById("inventoryBox");
+      if (!box) return;
+      const inv = (report && report.inventory) || {};
+      const keys = Object.keys(inv);
+      if (!keys.length) {
+        box.innerHTML = '<div class="inv-empty">暂无道具库存数据（解析日志后显示）</div>';
+        return;
+      }
+      // 收集竞拍实际使用过的道具 CID（含 items_used.cid）
+      const usedCids = new Set();
+      (report.games || []).forEach(g => {
+        (g.items_used || []).forEach(it => { if (it.cid) usedCids.add(String(it.cid)); });
+      });
+      // 面板只显示：竞拍使用过 且 档位≥3 的道具（无匹配留白）
+      const items = keys.map(cid => ({ cid, ...inv[cid] }))
+        .filter(it => (it.quality || 0) >= 3 && usedCids.has(it.cid))
+        .sort((a, b) => (b.quality || 0) - (a.quality || 0) || (b.count || 0) - (a.count || 0));
+      if (!items.length) {
+        box.innerHTML = '';
+        return;
+      }
+      const lowItems = items.filter(it => (it.count || 0) <= LOW_STOCK);
+      box.innerHTML = '<div class="inv-grid">' + items.map(it => {
+        const q = it.quality || 0;
+        const low = (it.count || 0) <= LOW_STOCK;
+        return `<div class="inv-card inv-clickable${low ? ' inv-low' : ''}" title="CID ${escapeHtml(it.cid)}（点击去价格页调整）" data-cid="${escapeHtml(it.cid)}">
+          <div class="inv-meta">
+            <span class="inv-name">${escapeHtml(it.name || '未知道具')}${low ? '<span class="inv-badge-low">⚠ 库存告急</span>' : ''}</span>
+            <span class="inv-tier" data-q="${q}">${q + '档'}</span>
+          </div>
+          <div class="inv-count${low ? ' inv-low' : ''}">${fmt(it.count || 0)}<small>个</small></div>
+        </div>`;
+      }).join("") + '</div>';
+      // 点击道具卡片 → 打开「道具价格配置/数量」页并定位到该道具
+      box.querySelectorAll(".inv-clickable").forEach(card => {
+        card.addEventListener("click", () => {
+          const cid = card.getAttribute("data-cid");
+          if (cid) window.open("bidking_item_prices.html?cid=" + encodeURIComponent(cid), "_blank");
+        });
+      });
+      // 低库存提醒：只针对【面板显示的道具】（竞拍使用过 且 ≥3 档），
+      // 与面板上的「⚠ 库存告急」角标保持一致；面板不漏提醒、面板外不打扰。
+      // 受开关控制（默认开）→ 触发【手机系统通知】（非页面提示）
+      const lowVisible = lowItems;
+      if (lowVisible.length && lowStockNotifyEnabled) {
+        sendLowStockNotify(lowVisible);
+      }
+    }
+
+    // 已提醒过的低库存道具（cid:数量），数量不变不重复弹系统通知
+    const notifSent = new Map();
+    // 按浏览器类型给出“开启通知权限”的具体路径（方便快捷）
+    function notifyGuide() {
+      const ua = navigator.userAgent || "";
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      const isChromium = /Chrome|CriOS|EdgA|Edg|SamsungBrowser/i.test(ua);
+      const isSafari = /Safari/i.test(ua) && !isChromium;
+      const isFirefox = /Firefox/i.test(ua);
+      const isUC = /UCBrowser/i.test(ua);
+      const isQuark = /Quark/i.test(ua);
+      const host = location.hostname || "本网站";
+      if (isIOS) {
+        return "Safari 开启方法：点地址栏左侧的「aA」图标 → 网站设置 → 通知 → 选【允许】→ 刷新本页后重开开关。";
+      }
+      if (isChromium) {
+        return "Chrome/Edge 开启方法：点地址栏左侧的「🔒 锁形/图标」→ 网站设置 → 通知 → 选【允许】→ 刷新本页后重开开关。";
+      }
+      if (isFirefox) {
+        return "Firefox 开启方法：点地址栏左侧的「🔒 锁形」→ 权限 → 通知 → 选【允许】→ 刷新本页后重开开关。";
+      }
+      if (isUC || isQuark) {
+        return `${isUC ? "UC" : "夸克"}浏览器开启方法：设置 → 网页浏览设置 → 站点权限 → ${host} 通知权限 → 允许。`;
+      }
+      if (isAndroid) {
+        return "Android 浏览器开启方法：地址栏左侧图标 → 网站设置 → 通知 → 允许 → 刷新本页后重开开关。";
+      }
+      return "浏览器开启方法：打开浏览器设置 → 网站/站点权限 → 通知 → 找到本网站，选择【允许】→ 刷新本页后重开开关。";
+    }
+
+    // 弹窗：显示「如何开启系统通知」的引导（按浏览器类型给出具体路径）
+    const notifyGuideModal = document.getElementById("notifyGuideModal");
+    const notifyGuideText = document.getElementById("notifyGuideText");
+    function showNotifyGuide(prefix) {
+      if (!notifyGuideModal || !notifyGuideText) { showStatus(prefix + notifyGuide()); return; }
+      notifyGuideText.innerHTML = prefix + "<br><br>📝 " + notifyGuide();
+      notifyGuideModal.classList.add("open");
+      notifyGuideModal.setAttribute("aria-hidden", "false");
+    }
+    function hideNotifyGuide() {
+      notifyGuideModal.classList.remove("open");
+      notifyGuideModal.setAttribute("aria-hidden", "true");
+    }
+    const notifyGuideCloseBtn = document.getElementById("notifyGuideClose");
+    if (notifyGuideCloseBtn) notifyGuideCloseBtn.addEventListener("click", hideNotifyGuide);
+    const notifyGuideCancelBtn = document.getElementById("notifyGuideCancel");
+    if (notifyGuideCancelBtn) notifyGuideCancelBtn.addEventListener("click", hideNotifyGuide);
+
+    function sendLowStockNotify(lowItems) {
+      const need = lowItems.filter(it => notifSent.get(it.cid) !== it.count);
+      if (!need.length) return;
+      const list = need.map(it => `${it.name || it.cid}（${fmt(it.count || 0)}个）`).join("、");
+      lowItems.forEach(it => notifSent.set(it.cid, it.count));
+      // 手机系统通知：已授权直接发；未决则请求授权后发（用户拒绝则静默，不打扰）
+      try {
+        if (!("Notification" in window)) return;
+        const send = () => new Notification("BidKing 道具库存告急", { body: `以下道具数量≤${LOW_STOCK}，请及时补充：${list}` });
+        if (Notification.permission === "granted") {
+          send();
+        } else if (Notification.permission === "default") {
+          Notification.requestPermission().then(p => { if (p === "granted") send(); });
+        }
+      } catch (e) { /* 系统通知不可用则放弃（手机浏览器未授权/后台限制），不打扰 */ }
+    }
+
+    function renderRows(rows) {
+      const tbody = document.getElementById("tableBody");
+      emptyBox.style.display = rows.length ? "none" : "block";
+      if (!rows.length) {
+        // 区分「过滤无匹配」和「完全没有对局数据」：后者给更明确的引导（App 模式尤其重要）
+        const noData = APP_MODE && !(window.__hasGames);
+        tbody.innerHTML = noData
+          ? '<tr><td colspan="12" style="text-align:center;color:#69717d;padding:36px 20px">📊 暂无对局数据<br><br>请在电脑端打开 BidKing解析器.exe 并点击「实时刷新」生成战绩后，再来查看。</td></tr>'
+          : '<tr><td colspan="12" style="text-align:center;color:#69717d;padding:28px">没有匹配记录</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((game, index) => {
+        const rowClass = game.is_win ? (Number(game.disp_profit || 0) > 0 ? "win-positive" : "win-negative") : "";
+        const items = (game.items_used || []).map(item => `R${item.round}: ${escapeHtml(item.name || "?")}`).join(" -> ") || "--";
+        const wonItems = formatWonItems(game.won_items || [], `won-items-${index}`);
+        const dispClass = Number(game.disp_profit || 0) >= 0 ? "profit-pos" : "profit-neg";
+        const myClass = Number(game.my_profit || 0) >= 0 ? "profit-pos" : "profit-neg";
+        const mapCell = escapeHtml(game.map_name || ("地图" + game.map_id));
+        return `<tr class="${rowClass}">
+          <td>${escapeHtml(game.time || "")}</td>
+          <td>${fmt(game.rounds)}</td>
+          <td>${mapCell}</td>
+          <td>${maskWinner ? (game.is_win ? "自己拍下" : "别人拍下") : escapeHtml(game.winner_name || "?")}</td>
+          <td class="items" title="${items}">${items}</td>
+          <td class="won-items">${wonItems}</td>
+          <td>${maskNum(game.final_bid)}</td>
+          <td>${maskNum(game.winner_final_bid)}</td>
+          <td>${maskNum(game.opponent_bid)}</td>
+          <td>${maskNum(game.actual_value)}</td>
+          <td class="${dispClass}">${signed(game.disp_profit)}</td>
+          <td class="${myClass}">${signed(game.my_profit)}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function formatWonItems(items, listId) {
+      if (!items.length) return "--";
+      const sortedItems = items.slice().sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
+      const list = sortedItems.map(item => {
+        const quality = item.quality ? `<span class="won-item-quality">Q${escapeHtml(item.quality)}</span>` : "";
+        return `<span class="won-item" title="CID ${escapeHtml(item.cid || '')}">${escapeHtml(item.name || '?')} ${quality}<span class="won-item-value">${fmt(item.value)}</span></span>`;
+      }).join("");
+      return `<div class="won-summary"><span>${fmt(sortedItems.length)} 件</span><button class="won-toggle" type="button" data-won-toggle="${escapeHtml(listId)}" aria-expanded="false">展开</button></div><div class="won-item-list" id="${escapeHtml(listId)}" hidden>${list}</div>`;
+    }
+
+    function toggleWonItems(button) {
+      const list = document.getElementById(button.dataset.wonToggle || "");
+      if (!list) return;
+      const expanded = button.getAttribute("aria-expanded") === "true";
+      button.setAttribute("aria-expanded", expanded ? "false" : "true");
+      button.textContent = expanded ? "展开" : "收起";
+      list.hidden = expanded;
+    }
+
+    function render(fileName) {
+      if (!report) return;
+      if (fileName) {
+        dropZone.querySelector("strong").textContent = `已加载 ${fileName}`;
+        document.getElementById("loadHint").textContent = "可以点击实时刷新，或继续拖入新的 result.json 替换当前结果。";
+      }
+      const rows = filteredGames();
+      renderCards(rows);
+      renderProfitTrend(rows);
+      renderValueTrend(rows);
+      renderMapValueStats(rows);
+      renderInventory();
+      renderSilverTrend();
+      renderRows(rows);
+    }
+
+    // 容器宽度变化 / 手机转屏后重绘三张走势图（canvas 位图不随 CSS 缩放自动重画）
+    let trendResizeTimer = null;
+    function redrawTrends() {
+      if (!report) return;
+      try {
+        const rows = filteredGames();
+        renderProfitTrend(rows);
+        renderValueTrend(rows);
+        renderSilverTrend();
+      } catch (e) {}
+    }
+    function scheduleRedrawTrends(delay) {
+      if (trendResizeTimer) clearTimeout(trendResizeTimer);
+      trendResizeTimer = setTimeout(redrawTrends, delay || 200);
+    }
+    window.addEventListener("resize", function() { scheduleRedrawTrends(250); });
+    window.addEventListener("orientationchange", function() { scheduleRedrawTrends(500); });
+
+    function maskNum(value) {
+      if (!maskDigits) return fmt(value);
+      const n = Number(value || 0);
+      if (n === 0) return "0";
+      const abs = Math.round(Math.abs(n));
+      const s = String(abs);
+      let masked;
+      if (s.length <= 3) {
+        masked = "***";
+      } else {
+        const prefix = abs - (abs % 1000);
+        const prefixFormatted = Number(prefix).toLocaleString("zh-CN");
+        masked = prefixFormatted.slice(0, -3) + "***";
+      }
+      return n < 0 ? "-" + masked : masked;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    document.getElementById("chooseBtn").addEventListener("click", event => {
+      event.stopPropagation();
+      fileInput.click();
+    });
+    copyLanUrlBtn.addEventListener("click", event => {
+      event.stopPropagation();
+      copyLanUrl();
+    });
+    const lowStockNotifyToggleBtn = document.getElementById("lowStockNotifyToggle");
+    if (lowStockNotifyToggleBtn) {
+      lowStockNotifyToggleBtn.textContent = lowStockNotifyEnabled ? "库存提醒:开" : "库存提醒:关";
+      lowStockNotifyToggleBtn.addEventListener("click", () => {
+        if (lowStockNotifyEnabled) {
+          // 关闭
+          lowStockNotifyEnabled = false;
+          localStorage.setItem("bidking-lowstock-notify", "0");
+          lowStockNotifyToggleBtn.textContent = "库存提醒:关";
+          showStatus("低库存提醒已关闭");
+          return;
+        }
+        // 开启前：检查浏览器系统通知能力/权限
+        if (!("Notification" in window)) {
+          showStatus("当前浏览器不支持系统通知，无法开启低库存提醒");
+          return;
+        }
+        const finishEnable = (ok, msg) => {
+          lowStockNotifyEnabled = ok;
+          localStorage.setItem("bidking-lowstock-notify", ok ? "1" : "0");
+          lowStockNotifyToggleBtn.textContent = ok ? "库存提醒:开" : "库存提醒:关";
+          showStatus(msg);
+        };
+        if (Notification.permission === "denied") {
+          // 之前拒绝过或在浏览器设置里被关掉：弹窗带具体路径引导
+          showNotifyGuide("❌ 系统通知权限已被拒绝/关闭。<br>按下面步骤开启后，回到本页重新打开此开关即可：");
+          lowStockNotifyToggleBtn.textContent = "库存提醒:关";
+          localStorage.setItem("bidking-lowstock-notify", "0");
+          return;
+        }
+        if (Notification.permission === "granted") {
+          finishEnable(true, "已开启。注意：本页需保持打开（可后台/锁屏）才能收到系统通知，请勿彻底关闭网页");
+          return;
+        }
+        // default：请求授权
+        Notification.requestPermission()
+          .then(p => {
+            if (p === "granted") {
+              finishEnable(true, "已开启。注意：本页需保持打开（可后台/锁屏）才能收到系统通知，请勿彻底关闭网页");
+            } else {
+              showNotifyGuide("⚠️ 未获得通知权限，低库存提醒未开启。<br>请按下面步骤手动允许，再回到本页重新打开此开关：");
+              lowStockNotifyToggleBtn.textContent = "库存提醒:关";
+              localStorage.setItem("bidking-lowstock-notify", "0");
+            }
+          })
+          .catch(() => showNotifyGuide("请求通知权限失败。<br>请按下面步骤手动开启，再回到本页重新打开此开关："));
+      });
+    }
+
+    // ---- 访问密码按钮（设置/清除）----
+    const passToggleBtn = document.getElementById("passToggle");
+    const passModal = document.getElementById("passModal");
+    const passInput = document.getElementById("passInput");
+    const passCurrentInput = document.getElementById("passCurrentInput");
+    const passCurrentField = document.getElementById("passCurrentField");
+    const passShowField = document.getElementById("passShowField");
+    const passShowBtn = document.getElementById("passShowBtn");
+    let passEnabled = false;
+    if (passToggleBtn && passModal && passInput) {
+      const passSaveBtn = document.getElementById("passSaveBtn");
+      const passCancelBtn = document.getElementById("passCancelBtn");
+      // 本机(exe 自开页面)免验证：改/清密码直接放行，还可查看当前密码；远程才需当前密码验证
+      const isLocalAccess = () => {
+        const h = location.hostname || "";
+        return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "";
+      };
+      passToggleBtn.addEventListener("click", () => {
+        const local = isLocalAccess();
+        // 本机：不显示「当前密码」验证框；已设置密码时显示「查看当前密码」按钮
+        if (passCurrentField) passCurrentField.style.display = (passEnabled && !local) ? "block" : "none";
+        if (passShowField) passShowField.style.display = (passEnabled && local) ? "block" : "none";
+        passModal.classList.add("open");
+      });
+      // 查看当前密码（安全考虑：后端不再返回明文，只给提示；忘记密码请直接重设）
+      if (passShowBtn) {
+        passShowBtn.addEventListener("click", async () => {
+          const showText = document.getElementById("passShowText");
+          const showInModal = (html) => {
+            if (showText) { showText.innerHTML = html; showText.style.display = "block"; }
+            else showStatus(html.replace(/<[^>]+>/g, ""));
+          };
+          try {
+            const r = await fetch("/api/pass-info", { cache: "no-store" });
+            const d = await r.json().catch(() => ({}));
+            if (d && d.pass_enabled && d.hint) {
+              showInModal("当前访问密码提示：<b>" + escapeHtml(d.hint) +
+                "</b><br><span style=\"color:var(--muted);font-size:12px;\">出于安全，密码明文不再显示。忘记密码？直接在上方输入新密码即可重设。</span>");
+            } else if (d && d.error === "forbidden") {
+              showInModal("<span style=\"color:var(--bad)\">查看密码仅限本机，远程不可查看</span>");
+            } else {
+              showInModal("当前未设置访问密码");
+            }
+          } catch (e) {
+            showInModal("查看密码失败：" + escapeHtml(e.message || e));
+          }
+        });
+      }
+      passSaveBtn.addEventListener("click", async () => {
+        const pwd = passInput.value.trim();
+        try {
+          let headers = {"Content-Type": "application/json"};
+          // 本机：直接改（后端已对本机放行）；远程：先用当前密码换 token 才能改/清除
+          if (passEnabled && !isLocalAccess()) {
+            const cur = passCurrentInput ? passCurrentInput.value.trim() : "";
+            if (!cur) { showStatus("请输入当前密码后才能修改/清除"); return; }
+            const auth = await fetch("/api/auth", {
+              method: "POST", headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({ pwd: cur })
+            });
+            const authData = await auth.json();
+            if (!authData || !authData.token) { showStatus("当前密码错误，无法修改"); return; }
+            headers["X-Auth-Token"] = authData.token;
+          }
+          const res = await fetch("/api/pass-set", {
+            method: "POST", headers,
+            body: JSON.stringify({ pwd })
+          });
+          const data = await res.json();
+          passEnabled = !!data.pass_enabled;
+          passModal.classList.remove("open");
+          passInput.value = "";
+          if (passCurrentInput) passCurrentInput.value = "";
+          passToggleBtn.textContent = passEnabled ? "访问密码:已设置" : "访问密码:未设置";
+          // 程序化打开的场景：设完密码后自动继续之前的动作（如开启公网）
+          if (_afterPassSave === "start-ngrok") {
+            _afterPassSave = "";
+            showStatus("访问密码已设置，正在继续开启公网…");
+            const nb = document.getElementById("ngrokToggle");
+            if (nb && !nb.classList.contains("on")) nb.click();
+            return;
+          }
+          showStatus(passEnabled ? "访问密码已设置（远程控制需输密码）" : "访问密码已清除（远程控制不需密码）");
+        } catch (e) {
+          showStatus("设置密码失败：" + (e.message || e));
+        }
+      });
+      passCancelBtn.addEventListener("click", () => {
+        passModal.classList.remove("open");
+        passInput.value = "";
+        if (passCurrentInput) passCurrentInput.value = "";
+        _afterPassSave = "";   // 取消即放弃"设完自动继续"的约定
+      });
+    }
+
+    // ===== 密码弹窗的程序化打开（2026-08-29 用户反馈：想开公网没设密码时，直接带他来设置）=====
+    // _afterPassSave 记录"设完密码后要自动继续的动作"，目前支持 "start-ngrok"
+    let _afterPassSave = "";
+    function openPassModal(hintText, afterAction) {
+      const hint = document.getElementById("passModalHint");
+      if (hint) {
+        hint.textContent = hintText || "";
+        hint.style.display = hintText ? "block" : "none";
+      }
+      const h = location.hostname || "";
+      const local = (h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "");
+      if (passCurrentField) passCurrentField.style.display = (passEnabled && !local) ? "block" : "none";
+      if (passShowField) passShowField.style.display = (passEnabled && local) ? "block" : "none";
+      _afterPassSave = afterAction || "";
+      passModal.classList.add("open");
+      if (passInput) passInput.focus();
+    }
+
+    // ---- 远程启动电脑程序 ----
+    // 说明：原「刷新数据 / 退出程序」两个远程控制入口已按需求移除，这里只保留启动估价器。
+    // 手机/网页只能"触发启动"，启动哪个程序完全由 exe 端白名单配置决定。
+    const remotePanelBtn = document.getElementById("remotePanelBtn");
+    const remoteModal = document.getElementById("remoteModal");
+    if (remotePanelBtn && remoteModal) {
+      const remotePwdField = document.getElementById("remotePwdField");
+      const remotePwdInput = document.getElementById("remotePwdInput");
+      const remoteCancelBtn = document.getElementById("remoteCancelBtn");
+      const launcherPathInput = document.getElementById("launcherPathInput");
+      const launcherDirsInput = document.getElementById("launcherDirsInput");
+      const launcherSaveBtn = document.getElementById("launcherSaveBtn");
+      const launcherStartBtn = document.getElementById("launcherStartBtn");
+      const launcherStatus = document.getElementById("launcherStatus");
+      const launcherStateText = {
+        idle: "未启动", launching: "正在启动…", confirming: "已启动，正在自动确认弹窗…",
+        running: "运行中", exited: "程序已退出", error: "出错"
+      };
+      function setLauncherStatus(text) { if (launcherStatus) launcherStatus.textContent = text || ""; }
+      function describeLaunchState(d) {
+        let s = (launcherStateText[d.state] || d.state)
+          + (d.message ? " · " + d.message : "")
+          + (d.error ? " · " + d.error : "");
+        if (d.confirm_pending) s += " ⚠ 卡密验证窗口仍在，可能需要到电脑上手动点「确定」";
+        if (d.confirm_detail) s += "（" + d.confirm_detail + "）";
+        return s;
+      }
+      // 令牌缓存：同一次会话里输过一次密码就复用（存 sessionStorage，关页面失效）
+      let cachedToken = "";
+      try { cachedToken = sessionStorage.getItem("bk_token") || ""; } catch (e) {}
+      function authHeaders() {
+        const h = { "Content-Type": "application/json" };
+        if (cachedToken) h["X-Auth-Token"] = cachedToken;
+        return h;
+      }
+      function showPwdField(msg) {
+        if (remotePwdField) remotePwdField.style.display = "";
+        if (msg) setLauncherStatus(msg);
+        if (remotePwdInput) remotePwdInput.focus();
+      }
+      // 鉴权策略：先直接发（本机或已有令牌都能过），只有收到 401 才提示输密码，换到令牌后自动重试一次。
+      // 旧写法是「密码启用 + 输入框为空 → 静默 return null」，用户点保存后毫无反应，这就是"保存不了"的根因。
+      async function withAuth(send) {
+        let r = null;
+        try { r = await send(authHeaders()); }
+        catch (e) { setLauncherStatus("请求失败：" + (e.message || e)); return null; }
+        if (r.status !== 401) return r;
+        const pwd = (remotePwdInput && remotePwdInput.value.trim()) || "";
+        if (!pwd) { showPwdField("需要访问密码：请在上方填入电脑端设置的访问密码，然后再点一次"); return null; }
+        try {
+          const ar = await fetch("/api/auth", { method: "POST",
+            headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pwd }) });
+          const ad = await ar.json().catch(() => ({}));
+          if (!ad || !ad.token) { setLauncherStatus("密码错误，无法获取权限"); return null; }
+          cachedToken = ad.token;
+          try { sessionStorage.setItem("bk_token", cachedToken); } catch (e) {}
+          if (remotePwdField) remotePwdField.style.display = "none";
+          return await send(authHeaders());
+        } catch (e) { setLauncherStatus("获取权限失败：" + (e.message || e)); return null; }
+      }
+      remotePanelBtn.addEventListener("click", () => {
+        remoteModal.classList.add("open");
+        loadLauncherConfig();
+        // 弹窗里含「安全与配对」区块，打开时立刻拉一次最新数据（含待处理请求/设备/开关）
+        try { if (window.__bkRefreshPair) window.__bkRefreshPair(); } catch (e) {}
+      });
+      if (remoteCancelBtn) remoteCancelBtn.addEventListener("click", () => { remoteModal.classList.remove("open"); });
+
+      async function loadLauncherConfig() {
+        try {
+          const r = await fetch("/api/launch/config", { cache: "no-store" });
+          if (!r.ok) return;
+          const d = await r.json();
+          if (launcherPathInput) launcherPathInput.value = (d.config && d.config.exact_path) || "";
+          if (launcherDirsInput) launcherDirsInput.value = ((d.config && d.config.search_dirs) || []).join(",");
+          setLauncherStatus(d.resolved
+            ? ("已找到程序：" + d.resolved_path)
+            : ("⚠ 未找到程序：" + (d.error || "请检查路径或搜索目录")));
+        } catch (e) { setLauncherStatus("读取启动配置失败"); }
+      }
+      async function refreshLauncherState() {
+        try {
+          const r = await fetch("/api/launch/status", { cache: "no-store" });
+          if (!r.ok) return;
+          const d = await r.json();
+          setLauncherStatus(describeLaunchState(d));
+          if (d.state === "launching" || d.state === "confirming") {
+            setTimeout(refreshLauncherState, 3000);
+          }
+        } catch (e) {}
+      }
+      if (launcherSaveBtn) launcherSaveBtn.addEventListener("click", async () => {
+        setLauncherStatus("正在保存…");
+        const dirs = (launcherDirsInput.value || "").split(",").map(s => s.trim()).filter(Boolean);
+        const body = JSON.stringify({ exact_path: launcherPathInput.value.trim(), search_dirs: dirs });
+        const r = await withAuth(h => fetch("/api/launch/config", { method: "POST", headers: h, body: body }));
+        if (!r) return;
+        let d = {};
+        try { d = await r.json(); } catch (e) {}
+        if (r.status >= 400 || d.ok === false) {
+          setLauncherStatus("保存失败：" + (d.error || ("HTTP " + r.status)));
+          return;
+        }
+        setLauncherStatus(d.resolved
+          ? ("已保存 ✅ 将启动：" + d.resolved_path)
+          : ("已保存 ⚠ 但没找到程序：" + (d.error || "请检查路径或搜索目录")));
+        loadLauncherConfig();
+      });
+      if (launcherStartBtn) launcherStartBtn.addEventListener("click", async () => {
+        setLauncherStatus("正在启动…");
+        const r = await withAuth(h => fetch("/api/launch", { method: "POST", headers: h, body: "{}" }));
+        if (!r) return;
+        let d = {};
+        try { d = await r.json(); } catch (e) {}
+        if (r.status >= 400 || d.ok === false) {
+          setLauncherStatus("启动失败：" + (d.error || ("HTTP " + r.status)));
+          return;
+        }
+        setLauncherStatus(describeLaunchState(d));
+        if (d.state === "launching" || d.state === "confirming" || d.state === "running") {
+          setTimeout(refreshLauncherState, 3000);
+        }
+      });
+      loadLauncherConfig();
+      refreshLauncherState();
+    }
+    dbCleanBtn.addEventListener("click", cleanDbByRetention);
+    dbClearBtn.addEventListener("click", clearDbWithConfirm);
+    refreshBtn.addEventListener("click", event => {
+      event.stopPropagation();
+      refreshFromServer();
+    });
+    saveOldJsonBtn.addEventListener("click", async event => {
+      event.stopPropagation();
+      await postSaveWarningAction("/api/json-save/save");
+      await loadReportFromServer(true);
+    });
+    discardOldJsonBtn.addEventListener("click", async event => {
+      event.stopPropagation();
+      await postSaveWarningAction("/api/json-save/discard");
+      await loadReportFromServer(true);
+    });
+    openSaveFolderBtn.addEventListener("click", event => {
+      event.stopPropagation();
+      postSaveWarningAction("/api/json-save/open-folder");
+    });
+    ackSaveWarningBtn.addEventListener("click", event => {
+      event.stopPropagation();
+      postSaveWarningAction("/api/json-save/ack");
+    });
+    autoRefreshToggle.addEventListener("click", event => event.stopPropagation());
+    autoRefreshToggle.addEventListener("change", async () => {
+      await setAutoRefreshEnabled(autoRefreshToggle.checked);
+    });
+    loadPlayersBtn.addEventListener("click", event => {
+      event.stopPropagation();
+      loadPlayerCandidates();
+    });
+    uidVisibilityToggle.addEventListener("click", event => {
+      event.stopPropagation();
+      setUidVisible(uidInput.type === "password");
+    });
+    uidInput.addEventListener("click", event => event.stopPropagation());
+    uidInput.addEventListener("input", () => {
+      localStorage.setItem("bidking-uid", getSelectedUid());
+    });
+    playerSelect.addEventListener("click", event => event.stopPropagation());
+    playerSelect.addEventListener("change", () => {
+      if (playerSelect.value) setSelectedUid(playerSelect.value);
+    });
+    themeToggle.addEventListener("click", () => {
+      applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    });
+    profitColorToggle.addEventListener("click", () => {
+      applyProfitColorMode(document.documentElement.dataset.profitColors === "inverted" ? "normal" : "inverted");
+    });
+    dropZone.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", event => loadFile(event.target.files[0]));
+    dropZone.addEventListener("dragover", event => {
+      event.preventDefault();
+      dropZone.classList.add("drag");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag"));
+    dropZone.addEventListener("drop", event => {
+      event.preventDefault();
+      dropZone.classList.remove("drag");
+      loadFile(event.dataTransfer.files[0]);
+    });
+
+    document.getElementById("btnAll").addEventListener("click", () => {
+      mode = "all";
+      document.getElementById("btnAll").classList.add("active");
+      document.getElementById("btnWins").classList.remove("active");
+      render();
+    });
+    document.getElementById("btnWins").addEventListener("click", () => {
+      mode = "wins";
+      document.getElementById("btnWins").classList.add("active");
+      document.getElementById("btnAll").classList.remove("active");
+      render();
+    });
+    document.getElementById("limitInput").addEventListener("change", () => render());
+    document.getElementById("fromTime").addEventListener("change", () => render());
+    document.getElementById("toTime").addEventListener("change", () => render());
+    document.getElementById("profitFilter").addEventListener("change", () => render());
+    document.getElementById("highValueBtn").addEventListener("click", openHighValueModal);
+    document.getElementById("statsBtn").addEventListener("click", openStatsModal);
+    document.getElementById("careerBtn").addEventListener("click", () => window.open("bidking_career.html?html_cache=20260523-formal-231", "_blank"));
+
+    function applyMaskDigits(mask) {
+      maskDigits = Boolean(mask);
+      const btn = document.getElementById("maskDigitsBtn");
+      if (btn) {
+        btn.textContent = maskDigits ? "显示后三位" : "隐藏后三位";
+        btn.classList.toggle("active", !maskDigits);
+      }
+      localStorage.setItem("bidking-mask-digits", maskDigits ? "1" : "0");
+      render();
+    }
+
+    function applyMaskWinner(mask) {
+      maskWinner = Boolean(mask);
+      const btn = document.getElementById("maskWinnerBtn");
+      if (btn) {
+        btn.textContent = maskWinner ? "显示赢家" : "隐藏赢家";
+        btn.classList.toggle("active", !maskWinner);
+      }
+      localStorage.setItem("bidking-mask-winner", maskWinner ? "1" : "0");
+      render();
+    }
+
+    document.getElementById("maskDigitsBtn")?.addEventListener("click", () => applyMaskDigits(!maskDigits));
+    document.getElementById("maskWinnerBtn")?.addEventListener("click", () => applyMaskWinner(!maskWinner));
+    document.getElementById("itemPriceConfigBtn")?.addEventListener("click", () => window.open("bidking_item_prices.html?html_cache=20260523-formal-231", "_blank"));
+    highValueInput.addEventListener("change", renderHighValueModal);
+    statsFromTime.addEventListener("change", renderStatsModal);
+    statsToTime.addEventListener("change", renderStatsModal);
+    document.getElementById("chips").addEventListener("click", event => {
+      const button = event.target.closest(".chip");
+      if (!button) return;
+      const prefix = Number(button.dataset.prefix);
+      if (prefixes.has(prefix)) {
+        prefixes.delete(prefix);
+        button.classList.remove("active");
+      } else {
+        prefixes.add(prefix);
+        button.classList.add("active");
+      }
+      render();
+    });
+    document.getElementById("tableBody").addEventListener("click", event => {
+      const button = event.target.closest(".won-toggle");
+      if (!button) return;
+      toggleWonItems(button);
+    });
+    document.getElementById("profitCard").addEventListener("click", openProfitDetail);
+    document.getElementById("profitDetailBtn").addEventListener("click", event => {
+      event.stopPropagation();
+      openProfitDetail();
+    });
+    document.getElementById("profitCard").addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openProfitDetail();
+      }
+    });
+    document.getElementById("profitDetailClose").addEventListener("click", closeProfitDetail);
+    profitDetailModal.addEventListener("click", event => {
+      if (event.target === profitDetailModal) closeProfitDetail();
+    });
+    document.getElementById("highValueClose").addEventListener("click", closeHighValueModal);
+    highValueModal.addEventListener("click", event => {
+      if (event.target === highValueModal) closeHighValueModal();
+    });
+    document.getElementById("statsClose").addEventListener("click", closeStatsModal);
+    statsModal.addEventListener("click", event => {
+      if (event.target === statsModal) closeStatsModal();
+    });
+    window.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        closeProfitDetail();
+        closeHighValueModal();
+        closeStatsModal();
+      }
+    });
+    window.addEventListener("resize", () => {
+      if (report) {
+        renderProfitTrend(filteredGames());
+        renderValueTrend(filteredGames());
+      }
+    });
+
+    
+    window.addEventListener("beforeunload", () => {
+      if (!autoRefreshToggle.checked) return;
+      const payload = JSON.stringify({ client_id: clientId });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon("/api/control/release", new Blob([payload], { type: "application/json" }));
+      } else {
+        fetch("/api/control/release", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true
+        });
+      }
+    });
+
+    // ========== 控制面板：公网访问 (ngrok) ==========
+
+    let ngrokPollingTimer = null;
+
+
+
+    // --- 公网访问 (ngrok) ---
+    let _ngrokPublicUrl = "";  // 内存保存公网地址，不写入任何 DOM 元素
+
+    function setNgrokUi(state) {
+      // state: { running, url, error, token_saved, token_masked }
+      const btn     = document.getElementById("ngrokToggle");
+      const lbl     = document.getElementById("ngrokToggleLabel");
+      const status  = document.getElementById("ngrokStatus");
+      const urlBox  = document.getElementById("ngrokUrlBox");
+      const savedEl = document.getElementById("ngrokTokenSaved");
+
+      // 内存保存 URL，不写入 DOM
+      if (state.url) _ngrokPublicUrl = state.url;
+
+      // token 状态显示
+      if (savedEl) {
+        if (state.token_saved && state.token_masked) {
+          savedEl.textContent = "✓ 已保存：" + state.token_masked;
+          savedEl.className = "ngrok-token-saved";
+        } else {
+          savedEl.textContent = "未设置（启动前需先保存 Token）";
+          savedEl.className = "ngrok-token-saved none";
+        }
+      }
+
+      const isOn = state.running;
+      btn.classList.toggle("on", isOn);
+      lbl.textContent = isOn ? "已开启" : "已关闭";
+      btn.disabled = false;
+
+      if (state.error) {
+        status.textContent = "错误：" + state.error;
+        status.className = "ngrok-status err";
+        urlBox.classList.remove("visible");
+        // 出错时恢复显示局域网地址
+        if (lanAccessBox && _lanUrl) lanAccessBox.style.display = "block";
+        return;
+      }
+      if (isOn && _ngrokPublicUrl) {
+        status.textContent = "运行中";
+        status.className = "ngrok-status ok";
+        urlBox.classList.add("visible");
+        // 开公网时隐藏局域网地址（避免混淆）
+        if (lanAccessBox) lanAccessBox.style.display = "none";
+      } else if (isOn) {
+        status.textContent = "正在获取地址...";
+        status.className = "ngrok-status";
+        urlBox.classList.remove("visible");
+        if (lanAccessBox) lanAccessBox.style.display = "none";
+      } else {
+        _ngrokPublicUrl = "";
+        status.textContent = "未启动";
+        status.className = "ngrok-status";
+        urlBox.classList.remove("visible");
+        // 关闭公网后恢复显示局域网地址
+        if (lanAccessBox && _lanUrl) lanAccessBox.style.display = "block";
+      }
+    }
+
+    // 保存 Token 按钮
+    document.getElementById("ngrokSaveTokenBtn").addEventListener("click", async () => {
+      const input  = document.getElementById("ngrokTokenInput");
+      const saveBtn = document.getElementById("ngrokSaveTokenBtn");
+      const savedEl = document.getElementById("ngrokTokenSaved");
+      const token = (input.value || "").trim();
+      if (!token) {
+        savedEl.textContent = "请先粘贴 Token";
+        savedEl.className = "ngrok-token-saved none";
+        return;
+      }
+      saveBtn.disabled = true;
+      savedEl.textContent = "正在保存并配置...";
+      savedEl.className = "ngrok-token-saved none";
+      // 检查是否通过 HTTP 服务器访问（file:// 协议不支持 POST）
+      if (location.protocol === "file:") {
+        savedEl.textContent = "请通过 python serve.py 访问此页面，file:// 协议不支持此功能";
+        savedEl.className = "ngrok-token-saved none";
+        saveBtn.disabled = false;
+        return;
+      }
+      try {
+        const resp = await fetch("/api/ngrok/token", {
+          method: "POST", cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token })
+        });
+        if (!resp.ok) {
+          savedEl.textContent = "服务器返回错误(HTTP " + resp.status + "），请确认 serve.py 正在运行";
+          savedEl.className = "ngrok-token-saved none";
+          return;
+        }
+        const data = await resp.json();
+        if (data.ok) {
+          input.value = "";
+          setNgrokUi(data);
+          showStatus("Token 已保存，现在可以启动公网访问");
+        } else {
+          savedEl.textContent = "保存失败：" + (data.error || "请确认 serve.py 正在运行且 ngrok.exe 存在");
+          savedEl.className = "ngrok-token-saved none";
+        }
+      } catch (e) {
+        const msg = e.message || String(e);
+        if (msg.includes("Failed to fetch") || msg.includes("NetworkError") || msg.includes("net::ERR")) {
+          savedEl.textContent = "网络请求失败：请通过 python serve.py 启动服务器后再使用此功能";
+        } else {
+          savedEl.textContent = "请求失败：" + msg;
+        }
+        savedEl.className = "ngrok-token-saved none";
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    async function fetchNgrokState() {
+      try {
+        const resp = await fetch("/api/ngrok/state", { cache: "no-store" });
+        if (!resp.ok) return null;
+        return await resp.json();
+      } catch { return null; }
+    }
+
+    async function pollNgrokUntilUrl() {
+      // 轮询直到拿到 URL 或出错，最多等 35 秒（后端最多 30 秒）
+      const deadline = Date.now() + 35000;
+      while (Date.now() < deadline) {
+        const state = await fetchNgrokState();
+        if (!state) break;
+        setNgrokUi(state);
+        if (!state.running || state.url || state.error) break;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+
+    document.getElementById("ngrokToggle").addEventListener("click", async () => {
+      const btn = document.getElementById("ngrokToggle");
+      const status = document.getElementById("ngrokStatus");
+      const isOn = btn.classList.contains("on");
+      if (location.protocol === "file:") {
+        status.textContent = "请通过 python serve.py 访问此页面";
+        status.className = "ngrok-status err";
+        return;
+      }
+      btn.disabled = true;
+      status.textContent = isOn ? "正在关闭..." : "正在启动...";
+      status.className = "ngrok-status";
+      try {
+        const resp = await fetch("/api/ngrok/" + (isOn ? "stop" : "start"), {
+          method: "POST", cache: "no-store",
+          headers: { "Content-Type": "application/json" }
+        });
+        if (!resp.ok) {
+          // 2026-08-29 用户反馈：没设密码就想开公网时，别只报错——直接带他去密码设置
+          let d = {};
+          try { d = await resp.json(); } catch (e) {}
+          const errMsg = (d && d.error) || "";
+          if (errMsg.indexOf("访问密码") !== -1) {
+            status.textContent = "需要先设置访问密码";
+            status.className = "ngrok-status err";
+            btn.disabled = false;
+            openPassModal("开启公网前需要先设置访问密码：输入你想用的密码后点「保存」，会自动继续开启公网。", "start-ngrok");
+            return;
+          }
+          status.textContent = errMsg ? ("出错：" + errMsg) : ("服务器返回错误(HTTP " + resp.status + ")");
+          status.className = "ngrok-status err";
+          btn.disabled = false;
+          if (errMsg.indexOf("authtoken") !== -1 || errMsg.indexOf("Token") !== -1) {
+            status.textContent = "请先保存 ngrok Token（在下方输入框粘贴后点「保存 Token」）";
+            const ti = document.getElementById("ngrokTokenInput");
+            if (ti) { try { ti.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} ti.focus(); }
+          }
+          return;
+        }
+        const data = await resp.json();
+        setNgrokUi(data);
+        if (data.error && (data.error.indexOf("authtoken") !== -1 || data.error.indexOf("Token") !== -1)) {
+          // Token 未保存（HTTP 200 但带 error）：聚焦到 Token 输入框引导用户
+          status.textContent = "请先保存 ngrok Token（在下方输入框粘贴后点「保存 Token」）";
+          const ti = document.getElementById("ngrokTokenInput");
+          if (ti) { try { ti.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} ti.focus(); }
+        }
+        if (!isOn && data.running && !data.url && !data.error) {
+          // 刚启动，URL 还没拿到，轮询等待
+          await pollNgrokUntilUrl();
+        }
+      } catch (e) {
+        const msg = e.message || String(e);
+        if (msg.includes("Failed to fetch") || msg.includes("NetworkError") || msg.includes("net::ERR")) {
+          status.textContent = "网络请求失败：请通过 python serve.py 启动服务器";
+        } else {
+          status.textContent = "请求失败：" + msg;
+        }
+        status.className = "ngrok-status err";
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById("copyNgrokBtn").addEventListener("click", async () => {
+      if (!_ngrokPublicUrl) { showError("公网地址尚未就绪，请稍候。"); return; }
+      // 复制带路径的完整访问地址
+      const urlToCopy = _ngrokPublicUrl + "/bidking_report.html";
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(urlToCopy);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = urlToCopy; ta.style.position = "fixed"; ta.style.left = "-9999px";
+          document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+        }
+        showStatus("✅ 已复制——请勿分享给他人");
+      } catch { showError("复制失败，请重试。"); }
+    });
+
+    // 页面可见时同步一次 ngrok 状态（EXE 模式才有此 API）
+    async function syncNgrokState() {
+      const state = await fetchNgrokState();
+      if (state) setNgrokUi(state);
+    }
+
+    // ========== 控制面板结束 ==========
+
+    window.addEventListener("DOMContentLoaded", () => {
+      initTheme();
+      initProfitMode();
+      setSelectedUid(localStorage.getItem("bidking-uid") || "");
+      setUidVisible(localStorage.getItem("bidking-uid-visible") === "1");
+      // App 模式完全跳过自动刷新初始化（不碰控制锁，exe 刷新权不被 App 抢）
+      if (!APP_MODE) {
+        setAutoRefreshEnabled(localStorage.getItem("bidking-auto-refresh") === "1");
+      }
+      applyMaskDigits(localStorage.getItem("bidking-mask-digits") !== "0");
+      applyMaskWinner(localStorage.getItem("bidking-mask-winner") !== "0");
+
+      // 默认显示全部历史对局：打开页面即展示所有已解析的对局，避免“打开即空表”。
+      // 如需只看“打开后新打的局”，可手动在“开始时间”里选择当前时刻。
+      document.getElementById("fromTime").value = "";
+
+      // App 模式不参与控制锁（防抢刷新，刷新权归 exe 网页）
+      if (!APP_MODE) {
+        refreshControlState();
+        window.setInterval(refreshControlState, 10000);
+      }
+
+      // 公网访问准入闸（2026-08-29）：公网访客须配对/密码通过后才拉数据；
+      // App 模式的令牌由 App 原生注入，直接加载。App 模式还跳过电脑端专属轮询
+      // （ngrok 状态/服务器信息），公网下少一半请求，页面更快可用。
+      const startDataLoads = () => {
+        loadDbStatus();
+        loadSaveWarning();
+        window.setInterval(loadSaveWarning, 10000);
+        loadReportFromServer(false);
+      };
+      if (APP_MODE) {
+        // App 模式：不轮询电脑端专属状态（ngrok/控制锁），但 server-info 拉一次
+        // （页脚版本号与 lan 信息来自它）
+        loadServerInfo();
+        // 等原生令牌注入就绪再拉数据（修复 局域网+已设密码 时的 401 竞态）
+        waitForAppToken(startDataLoads);
+      } else {
+        loadServerInfo();
+        window.setInterval(loadServerInfo, 10000);
+        syncNgrokState();
+        window.setInterval(syncNgrokState, 15000);
+        ensureAccess().then(ok => {
+          if (!ok) showError("⛔ 公网访问未获批准：请在电脑端「安全与配对」点「同意」后刷新本页（或输对访问密码）");
+          startDataLoads();
+        });
+      }
+
+      // 拿仓率/盈亏率切换按钮
+      document.getElementById("rateToggle").onclick = toggleRateMode;
+
+      // 浏览器心跳：每30秒 ping 一次服务器，关闭页面后服务器60秒内自动退出
+      function _sendPing() { fetch("/api/ping", { cache: "no-store" }).catch(() => {}); }
+      _sendPing();
+      window.setInterval(_sendPing, 30000);
+
+      // 阶段3：安全重置黄条（换机/拷贝后自动重置凭据，数据未动）
+      (function () {
+        fetch("/api/pair/notice", { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (d) {
+            if (d && d.notice) {
+              var box = document.getElementById("secWarnBox");
+              if (box) { box.textContent = "🛡 安全提醒：" + d.notice; box.classList.add("open"); }
+            }
+          }).catch(function () {});
+      })();
+
+      // ===== 阶段2：安全与配对面板 =====
+      // 只有电脑本机跑（App 模式 CSS 已隐藏，这里再短路一次，连轮询都不发）。
+      // 批准配对必须在电脑上人工点，这是三道关里的第二道：
+      // 就算密码泄露，攻击者自己点不了「同意」。
+      (function initSecurityPanel() {
+        if (APP_MODE) return;
+        const pendList  = document.getElementById("pairPendingList");
+        const devList   = document.getElementById("pairDeviceList");
+        const pendBadge = document.getElementById("pairPendingBadge");
+        const devBadge  = document.getElementById("pairDeviceBadge");
+        const statusEl  = document.getElementById("pairStatus");
+        const remoteBtn = document.getElementById("remotePanelBtn");
+        const remoteModal = document.getElementById("remoteModal");
+        if (!pendList && !devList && !remoteBtn) return;
+        const SW = {
+          pairing_required:    document.getElementById("swPairingRequired"),
+          allow_remote_launch: document.getElementById("swRemoteLaunch"),
+          ngrok_need_pair:     document.getElementById("swNgrokNeedPair"),
+        };
+        function setStatus(m) { if (statusEl) statusEl.textContent = m || ""; }
+        // 设备名/型号/IP 全部来自网络，一律转义后再插进 DOM，防止恶意设备名注入脚本
+        function esc(s) {
+          return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+          });
+        }
+        function ago(ts) {
+          const t = Number(ts) || 0;
+          if (!t) return "从未";
+          const d = Math.max(0, Math.floor(Date.now() / 1000 - t));
+          if (d < 60) return d + " 秒前";
+          if (d < 3600) return Math.floor(d / 60) + " 分钟前";
+          if (d < 86400) return Math.floor(d / 3600) + " 小时前";
+          return Math.floor(d / 86400) + " 天前";
+        }
+        function renderPending(list) {
+          if (!pendList) return;
+          const cnt = (list || []).length;
+          if (pendBadge) pendBadge.textContent = String(cnt);
+          // 待处理请求 > 0：让「🔧 远程控制」按钮变红并带上数量，
+          // 因为配对面板默认藏在弹窗里，用户需要一个入口提示。
+          if (remoteBtn) {
+            if (cnt > 0) {
+              remoteBtn.classList.add("sec-pending-alert");
+              remoteBtn.textContent = "🔧 远程控制 · " + cnt;
+            } else {
+              remoteBtn.classList.remove("sec-pending-alert");
+              remoteBtn.textContent = "🔧 远程控制";
+            }
+          }
+          if (!list || !list.length) {
+            pendList.innerHTML = '<div class="sec-empty">目前没有待处理的配对请求</div>';
+            return;
+          }
+          pendList.innerHTML = list.map(function (r) {
+            const left = Math.max(0, Math.floor((Number(r.exp) || 0) - Date.now() / 1000));
+            return '<div class="sec-item"><div class="sec-item-main">' +
+              '<div class="sec-item-name"><span class="sec-pending-dot"></span>' +
+                esc(r.name || "未知设备") + '</div>' +
+              '<div class="sec-item-sub">' + esc(r.model || "") +
+                (r.ip ? ' · 来自 ' + esc(r.ip) : '') + ' · ' + left + ' 秒后过期</div>' +
+              '</div><div class="sec-item-actions">' +
+                '<button class="btn" data-pair-approve="' + esc(r.rid) + '" type="button">同意</button>' +
+                '<button class="btn secondary" data-pair-reject="' + esc(r.rid) + '" type="button">拒绝</button>' +
+              '</div></div>';
+          }).join("");
+        }
+        function renderDevices(list) {
+          if (!devList) return;
+          if (!list || !list.length) {
+            devList.innerHTML = '<div class="sec-empty">还没有配对过的设备</div>';
+            if (devBadge) devBadge.textContent = "0";
+            return;
+          }
+          if (devBadge) devBadge.textContent = String(list.length);
+          devList.innerHTML = list.map(function (d) {
+            return '<div class="sec-item"><div class="sec-item-main">' +
+              '<div class="sec-item-name">' + esc(d.name || "未命名设备") + '</div>' +
+              '<div class="sec-item-sub">' + esc(d.model || "") +
+                (d.last_ip ? " · " + esc(d.last_ip) : "") +
+                " · 最近使用 " + ago(d.last_seen) + '</div>' +
+              '</div><div class="sec-item-actions">' +
+                '<button class="btn secondary" data-pair-revoke="' + esc(d.id) + '" type="button">撤销</button>' +
+              '</div></div>';
+          }).join("");
+        }
+        async function pairPost(path, body) {
+          let r, d = {};
+          try {
+            r = await fetch(path, { method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body || {}) });
+            try { d = await r.json(); } catch (e) {}
+          } catch (e) { return { ok: false, status: 0, data: {} }; }
+          return { ok: r.ok && d.ok !== false, status: r.status, data: d };
+        }
+        // 事件委托：列表每 8 秒重绘一次，逐个绑按钮会丢事件
+        if (pendList) pendList.addEventListener("click", async function (ev) {
+          const b = ev.target.closest("button");
+          if (!b) return;
+          if (b.dataset.pairApprove) {
+            setStatus("正在批准…");
+            const res = await pairPost("/api/pair/approve", { rid: b.dataset.pairApprove });
+            setStatus(res.ok ? "已同意，手机会自动完成配对"
+                             : ("批准失败：" + (res.data.error || res.status)));
+            refreshPair();
+          } else if (b.dataset.pairReject) {
+            await pairPost("/api/pair/reject", { rid: b.dataset.pairReject });
+            setStatus("已拒绝");
+            refreshPair();
+          }
+        });
+        if (devList) devList.addEventListener("click", async function (ev) {
+          const b = ev.target.closest("button");
+          if (!b || !b.dataset.pairRevoke) return;
+          if (!window.confirm("撤销后这部手机需要重新配对，确定吗？")) return;
+          const res = await pairPost("/api/pair/revoke", { device_id: b.dataset.pairRevoke });
+          setStatus(res.ok ? "已撤销" : ("撤销失败：" + (res.data.error || res.status)));
+          refreshPair();
+        });
+        Object.keys(SW).forEach(function (k) {
+          const el = SW[k];
+          if (!el) return;
+          el.addEventListener("change", async function () {
+            const payload = {}; payload[k] = el.checked;
+            const res = await pairPost("/api/pair/switches", { switches: payload });
+            setStatus(res.ok ? "已保存" : ("保存失败：" + (res.data.error || res.status)));
+          });
+        });
+        let busy = false;
+        async function refreshPair() {
+          if (busy) return;
+          busy = true;
+          try {
+            const pr = await fetch("/api/pair/pending", { cache: "no-store" });
+            if (pr.ok) { const d = await pr.json().catch(() => ({})); renderPending(d.pending || []); }
+            const dr = await fetch("/api/pair/devices", { cache: "no-store" });
+            if (dr.ok) {
+              const d = await dr.json().catch(() => ({}));
+              renderDevices(d.devices || []);
+              const sw = d.switches || {};
+              Object.keys(SW).forEach(function (k) { if (SW[k]) SW[k].checked = !!sw[k]; });
+            }
+          } catch (e) {}
+          busy = false;
+        }
+        refreshPair();
+        window.setInterval(refreshPair, 8000);
+        // 配对面板藏在「🔧 远程控制」弹窗里，弹窗打开时立即刷新一次（轮询最快也要等 8 秒）
+        window.__bkRefreshPair = refreshPair;
+      })();
+    });
+  </script>
+
+  <!-- 访问密码设置弹窗 -->
+  <!-- 版本署名页脚（2026-08-30）：内容由 loadServerInfo 按 server-info 填充 -->
+  <div id="appFooter" style="text-align:center;color:var(--muted);font-size:11px;padding:16px 0 20px;">BidKing 竞拍盈亏统计工具</div>
+  </body>
+</html>

@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>BidKing &#36947;&#20855;&#20215;&#26684;&#37197;&#32622;/&#25968;&#37327;</title>
+  <style>
+    /* App 模式（?app=1）：隐藏编辑操作（保存/清零），保留查看 */
+    html.app-mode #saveBtn { display:none !important; }
+    html.app-mode #clearAllBtn { display:none !important; }
+    @media (max-width:820px){ html.app-mode { zoom:.78 } }
+    /* App 模式（?app=1）：表格卡片化——手机上一列一条道具，免横向滑动 */
+    html.app-mode .table-wrap table { min-width: 0 !important; display: block; }
+    html.app-mode .table-wrap table thead { display: none; }
+    html.app-mode .table-wrap table tbody { display: block; }
+    html.app-mode .table-wrap table tbody tr {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        "name name"
+        "cid  grade"
+        "price count";
+      gap: 6px 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      background: var(--panel);
+      box-shadow: 0 2px 10px rgba(52,42,28,.05);
+    }
+    html.app-mode .table-wrap table tbody tr > td { padding: 0; border: 0; }
+    html.app-mode .table-wrap table tbody tr > td:nth-child(1) { grid-area: name; font-weight: 800; font-size: 15px; }
+    html.app-mode .table-wrap table tbody tr > td:nth-child(2) { grid-area: cid; color: var(--muted); font-family: Consolas, monospace; font-size: 12px; }
+    html.app-mode .table-wrap table tbody tr > td:nth-child(3) { grid-area: grade; justify-self: end; }
+    html.app-mode .table-wrap table tbody tr > td:nth-child(4) { grid-area: price; }
+    html.app-mode .table-wrap table tbody tr > td:nth-child(5) { grid-area: count; justify-self: end; }
+    html.app-mode .table-wrap table tbody tr > td:nth-child(4)::before { content: "自定义单价"; display: block; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+    html.app-mode .table-wrap table tbody tr > td:nth-child(5)::before { content: "当前数量"; display: block; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+    html.app-mode .price-input { width: 100%; }
+    /* App 模式：顶部标题/工具栏改为竖向堆叠，按钮全宽 */
+    html.app-mode .topbar { flex-direction: column; align-items: stretch; gap: 10px; }
+    html.app-mode .topbar > div:first-child { margin-bottom: 2px; }
+    html.app-mode h1 { font-size: 22px; }
+    html.app-mode .toolbar { grid-template-columns: 1fr; }
+    :root {
+      color-scheme: light;
+      --bg: #f7f4ec;
+      --panel: #fffdf8;
+      --text: #172033;
+      --muted: #667084;
+      --line: #ded6c8;
+      --accent: #2f7f72;
+      --accent-dark: #215b52;
+      --danger: #b93434;
+      --shadow: 0 10px 28px rgba(38, 31, 18, .08);
+    }
+    /* 深色主题（App 模式与报表页全局联动） */
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #12171f;
+      --panel: #171f29;
+      --text: #e8eef4;
+      --muted: #8fa0b3;
+      --line: #2a3646;
+      --accent: #40b99f;
+      --accent-dark: #5dd8b8;
+      --danger: #ff5b61;
+      --shadow: 0 10px 28px rgba(0, 0, 0, .35);
+    }
+    html[data-theme="dark"] input,
+    html[data-theme="dark"] th { background: #1c2632; color: var(--text); border-color: var(--line); }
+    html[data-theme="dark"] .grade { background: #16291f; color: #5dd8b8; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(rgba(47, 127, 114, .04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(47, 127, 114, .04) 1px, transparent 1px),
+        var(--bg);
+      background-size: 24px 24px;
+      color: var(--text);
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+    .app { width: min(1160px, calc(100vw - 32px)); margin: 28px auto; }
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: 0; }
+    .sub { color: var(--muted); font-size: 14px; line-height: 1.7; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; box-shadow: var(--shadow); margin-bottom: 16px; }
+    .toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 12px; align-items: center; }
+    .search,
+    .price-input { height: 42px; border: 1px solid #cbbfae; border-radius: 6px; background: #fffefb; color: var(--text); padding: 0 12px; font: inherit; outline: none; }
+    .search:focus,
+    .price-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47, 127, 114, .16); }
+    .btn { height: 42px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: #fff; padding: 0 16px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .btn:hover { background: var(--accent-dark); }
+    .btn.secondary { border-color: #cbbfae; background: #fffdf8; color: var(--text); }
+    .btn.secondary:hover { background: #f0eadf; }
+    .btn.danger { border-color: var(--danger); background: var(--danger); }
+    .status { min-height: 24px; margin-top: 12px; color: var(--accent-dark); font-weight: 700; }
+    .table-wrap { max-height: calc(100vh - 230px); overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: var(--shadow); }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid #ece5d9; text-align: left; vertical-align: middle; }
+    th { position: sticky; top: 0; z-index: 1; background: #eee6d7; color: #6f5a20; font-size: 14px; }
+    .cid { color: var(--muted); font-family: Consolas, monospace; font-size: 13px; }
+    .grade { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; height: 26px; border-radius: 999px; background: #edf7f4; color: var(--accent-dark); font-weight: 700; font-size: 13px; }
+    .price-input { width: 150px; }
+    table { min-width: 860px; }
+    .inv-low-qty { color: #b93434; font-weight: 800; }
+    .locate-highlight { background: #fff3c4 !important; outline: 2px solid #e2b93b; outline-offset: -2px; }
+    .empty { display: none; padding: 28px; text-align: center; color: var(--muted); }
+    .empty.open { display: block; }
+    @media (max-width: 720px) {
+      .app { width: min(100vw - 20px, 1160px); margin: 16px auto; }
+      .topbar { flex-direction: column; }
+      .toolbar { grid-template-columns: 1fr; }
+      .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>&#36947;&#20855;&#20215;&#26684;&#37197;&#32622;/&#25968;&#37327;</h1>
+        <div class="sub">1 &#26723;&#36947;&#20855;&#22266;&#23450;&#25353; 1,200&#65292;2 &#26723;&#36947;&#20855;&#22266;&#23450;&#25353; 2,500&#12290;&#36825;&#37324;&#20165;&#37197;&#32622; 3 &#26723;&#21450;&#20197;&#19978;&#30340;&#26080;&#22266;&#23450;&#20215;&#20540;&#36947;&#20855;&#65292;&#26410;&#22635;&#20889;&#26102;&#25353; 0 &#22788;&#29702;&#24182;&#32487;&#32493;&#25353;&#25968;&#37327;&#26174;&#31034;&#12290;</div>
+      </div>
+      <button class="btn secondary" id="backBtn" type="button">&#36820;&#22238;&#32479;&#35745;&#39029;</button>
+    </header>
+
+    <section class="panel">
+      <div class="toolbar">
+        <input class="search" id="searchInput" type="search" placeholder="&#25628;&#32034;&#36947;&#20855;&#21517;&#31216;&#25110; CID">
+        <button class="btn" id="saveBtn" type="button">&#20445;&#23384;&#24182;&#37325;&#26032;&#32479;&#35745;</button>
+        <button class="btn danger" id="clearAllBtn" type="button">&#20840;&#37096;&#28165;&#38646;</button>
+      </div>
+      <div class="sub" id="summaryText">&#27491;&#22312;&#35835;&#21462;&#25968;&#25454;&#24211;&#20215;&#26684;...</div>
+      <div class="status" id="statusText"></div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>&#36947;&#20855;&#21517;&#31216;</th>
+            <th>CID</th>
+            <th>&#36947;&#20855;&#26723;&#20301;</th>
+            <th>&#33258;&#23450;&#20041;&#21333;&#20215;</th>
+            <th>&#24403;&#21069;&#25968;&#37327;</th>
+          </tr>
+        </thead>
+        <tbody id="itemPriceTableBody">
+          <tr><td colspan="4" style="text-align:center;color:#69717d;padding:28px">&#27491;&#22312;&#35835;&#21462;&#25968;&#25454;&#24211;&#20215;&#26684;...</td></tr>
+        </tbody>
+      </table>
+      <div class="empty" id="emptyBox">&#27809;&#26377;&#21305;&#37197;&#30340;&#36947;&#20855;&#12290;</div>
+    </section>
+  </main>
+
+  <script>
+    // App 模式（?app=1）：隐藏编辑操作（保存/清零），保留查看数量
+    const APP_MODE = /[?&]app=1/.test(location.search);
+    if (APP_MODE) {
+      try { document.documentElement.classList.add("app-mode"); } catch (e) {}
+      // 全局设置联动：深色主题 + 盈亏颜色（App 内跨页共享）
+      const theme = localStorage.getItem("bidking-global-theme") || "light";
+      document.documentElement.dataset.theme = theme;
+    }
+    const VARIABLE_BATTLE_ITEMS = [{"cid":"100102","name":"\u5341\u65b9\u7aa5\u89c6","grade":3},{"cid":"100106","name":"\u4f18\u54c1\u626b\u63cf","grade":3},{"cid":"100113","name":"\u6781\u54c1\u5747\u683c","grade":3},{"cid":"100118","name":"\u4f18\u54c1\u5b58\u91cf","grade":3},{"cid":"100124","name":"\u4f18\u54c1\u4f30\u4ef7","grade":3},{"cid":"100137","name":"\u5b9d\u5149\u516d\u9274","grade":3},{"cid":"100151","name":"\u3010\u5bb6\u5177\u7269\u54c1\u3011\u9274\u5f71","grade":3},{"cid":"100152","name":"\u3010\u533b\u7597\u836f\u54c1\u3011\u9274\u5f71","grade":3},{"cid":"100153","name":"\u3010\u65f6\u5c1a\u6f6e\u6d41\u3011\u9274\u5f71","grade":3},{"cid":"100154","name":"\u3010\u5175\u88c5\u519b\u706b\u3011\u9274\u5f71","grade":3},{"cid":"100155","name":"\u3010\u73e0\u5b9d\u77ff\u85cf\u3011\u9274\u5f71","grade":3},{"cid":"100156","name":"\u3010\u6587\u7269\u53e4\u8463\u3011\u9274\u5f71","grade":3},{"cid":"100157","name":"\u3010\u6570\u7801\u5a31\u4e50\u3011\u9274\u5f71","grade":3},{"cid":"100158","name":"\u3010\u80fd\u6e90\u4ea4\u901a\u3011\u9274\u5f71","grade":3},{"cid":"100159","name":"\u3010\u98df\u996e\u73cd\u9990\u3011\u9274\u5f71","grade":3},{"cid":"100160","name":"\u3010\u4e66\u753b\u53e4\u7c4d\u3011\u9274\u5f71","grade":3},{"cid":"100161","name":"\u81f3\u5b9d\u5bfb\u8e2a","grade":3},{"cid":"100162","name":"\u81f3\u5b9d\u4f53\u91cf","grade":3},{"cid":"100165","name":"\u5de8\u7269\u6807\u8bc6","grade":3},{"cid":"100166","name":"\u5de8\u7269\u9274\u5b9a","grade":3},{"cid":"100167","name":"\u5de8\u7269\u4f30\u4ef7","grade":3},{"cid":"100107","name":"\u6781\u54c1\u626b\u63cf","grade":4},{"cid":"100115","name":"\u5e93\u5b58\u6e05\u70b9","grade":4},{"cid":"100119","name":"\u6781\u54c1\u5b58\u91cf","grade":4},{"cid":"100125","name":"\u6781\u54c1\u4f30\u4ef7","grade":4},{"cid":"100130","name":"\u968f\u673a\u62bd\u68c0\uff084\uff09","grade":4},{"cid":"100138","name":"\u5b9d\u5149\u516b\u9274","grade":4},{"cid":"100139","name":"\u5b9d\u5149\u5341\u9274","grade":4},{"cid":"100163","name":"\u81f3\u5b9d\u4f30\u4ef7","grade":4},{"cid":"100168","name":"\u5de8\u7269\u62bd\u6837","grade":4},{"cid":"100169","name":"\u5355\u683c\u5747\u4ef7","grade":4},{"cid":"100170","name":"\u4e24\u683c\u5747\u4ef7","grade":4},{"cid":"100171","name":"\u4e09\u683c\u5747\u4ef7","grade":4},{"cid":"100172","name":"\u56db\u683c\u5747\u4ef7","grade":4},{"cid":"100173","name":"\u516d\u683c\u5747\u4ef7","grade":4},{"cid":"100100","name":"\u5168\u5e93\u900f\u89c6","grade":5},{"cid":"100103","name":"\u603b\u4ed3\u50a8\u7a7a\u95f4","grade":5},{"cid":"100108","name":"\u73cd\u54c1\u626b\u63cf","grade":5},{"cid":"100114","name":"\u73cd\u54c1\u5747\u683c","grade":5},{"cid":"100120","name":"\u73cd\u54c1\u5b58\u91cf","grade":5},{"cid":"100131","name":"\u968f\u673a\u62bd\u68c0\uff086\uff09","grade":5},{"cid":"100140","name":"\u534e\u4e3d\u5b9d\u5149","grade":5},{"cid":"100164","name":"\u81f3\u5b9d\u62bd\u6837","grade":5},{"cid":"100121","name":"\u7ec8\u6781\u5ba1\u8ba1","grade":6},{"cid":"100126","name":"\u73cd\u54c1\u4f30\u4ef7","grade":6},{"cid":"100127","name":"\u5168\u77e5\u5168\u80fd","grade":6},{"cid":"100132","name":"\u968f\u673a\u62bd\u68c0\uff088\uff09","grade":6},{"cid":"100133","name":"\u968f\u673a\u62bd\u68c0\uff0810\uff09","grade":6},{"cid":"100134","name":"\u660e\u955c\u4e4b\u773c","grade":6},{"cid":"100174","name":"\u3010\u80fd\u6e90\u4ea4\u901a\u3011\u68c0\u5b9a","grade":6}];
+    const tableBody = document.getElementById("itemPriceTableBody");
+    const searchInput = document.getElementById("searchInput");
+    const statusText = document.getElementById("statusText");
+    const summaryText = document.getElementById("summaryText");
+    const emptyBox = document.getElementById("emptyBox");
+    let allRows = VARIABLE_BATTLE_ITEMS.map(item => ({ ...item, price: 0, count: null }));
+
+    function getClientId() {
+      let id = localStorage.getItem("bidking-client-id");
+      if (!id) {
+        id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        localStorage.setItem("bidking-client-id", id);
+      }
+      return id;
+    }
+
+    function fmt(value) {
+      return Number(value || 0).toLocaleString("zh-CN");
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function showStatus(message) {
+      statusText.textContent = message;
+    }
+
+    function filterRows() {
+      const keyword = searchInput.value.trim().toLowerCase();
+      if (!keyword) return allRows;
+      return allRows.filter(item => `${item.name} ${item.cid} ${item.grade}`.toLowerCase().includes(keyword));
+    }
+
+    function collectPricesFromInputs() {
+      const prices = {};
+      tableBody.querySelectorAll("[data-item-price-cid]").forEach(input => {
+        const cid = input.getAttribute("data-item-price-cid") || "";
+        const price = Math.max(0, Math.floor(Number(input.value || 0)));
+        if (cid) prices[cid] = Number.isFinite(price) ? price : 0;
+      });
+      allRows.forEach(item => {
+        if (!(item.cid in prices)) prices[item.cid] = Math.max(0, Math.floor(Number(item.price || 0)));
+      });
+      return prices;
+    }
+
+    function syncPricesToState() {
+      // 在重建表格前，把当前输入框里的值同步回 allRows，避免搜索/筛选导致输入丢失
+      tableBody.querySelectorAll("[data-item-price-cid]").forEach(input => {
+        const cid = input.getAttribute("data-item-price-cid");
+        const item = allRows.find(r => r.cid === cid);
+        if (item) item.price = Math.max(0, Math.floor(Number(input.value || 0)));
+      });
+    }
+
+    function renderTable() {
+      syncPricesToState();
+      const rows = filterRows();
+      emptyBox.classList.toggle("open", !rows.length);
+      summaryText.textContent = `\u5171 ${fmt(allRows.length)} \u79cd\u65e0\u56fa\u5b9a\u4ef7\u503c\u9053\u5177\uff0c\u5f53\u524d\u663e\u793a ${fmt(rows.length)} \u79cd\uff1b\u4ef7\u683c\u4fdd\u5b58\u5728\u672c\u673a\u6570\u636e\u5e93\u3002`;
+      if (!rows.length) {
+        tableBody.innerHTML = "";
+        return;
+      }
+      tableBody.innerHTML = rows.map(item => `
+        <tr>
+          <td>${escapeHtml(item.name)}</td>
+          <td class="cid">${escapeHtml(item.cid)}</td>
+          <td><span class="grade">${fmt(item.grade)} \u6863</span></td>
+          <td><input class="price-input" type="number" min="0" step="1" value="${Number(item.price || 0)}" data-item-price-cid="${escapeHtml(item.cid)}"></td>
+          <td class="${item.count == null ? 'cid' : (item.count <= 10 ? 'inv-low-qty' : '')}">${item.count == null ? '\u2014' : fmt(item.count)}</td>
+        </tr>
+      `).join("");
+    }
+
+    // 带重试的 JSON 拉取（2026-08-30）：ngrok 免费版会对「App 注入完成前的首请求」
+    // 回警告页 HTML（200 + text/html），response.json() 解析即失败——此前只请求一次，
+    // 表现为「无法连接价格数据库」。注入通常几百毫秒内完成，重试即恢复。
+    async function fetchJsonRetry(url, tries = 3, delayMs = 1500) {
+      let lastErr = null;
+      for (let i = 0; i < tries; i++) {
+        if (i > 0) await new Promise(res => setTimeout(res, delayMs));
+        try {
+          const r = await fetch(url, { cache: "no-store" });
+          if (!r.ok) { lastErr = new Error("HTTP " + r.status); continue; }
+          return await r.json();
+        } catch (e) { lastErr = e; }
+      }
+      throw lastErr || new Error("fetch failed");
+    }
+
+    async function loadDatabasePrices() {
+      showStatus("\u6b63\u5728\u8bfb\u53d6\u6570\u636e\u5e93\u4ef7\u683c...");
+      try {
+        const data = await fetchJsonRetry("/api/item-prices");
+        const prices = data.prices || {};
+        const sourceItems = Array.isArray(data.items) && data.items.length ? data.items : VARIABLE_BATTLE_ITEMS;
+        allRows = sourceItems.map(item => ({ ...item, price: Math.max(0, Math.floor(Number(prices[item.cid] || item.price || 0))) }));
+        showStatus("\u5df2\u8bfb\u53d6\u6570\u636e\u5e93\u4ef7\u683c\u3002");
+      } catch (error) {
+        allRows = VARIABLE_BATTLE_ITEMS.map(item => ({ ...item, price: 0 }));
+        showStatus("\u65e0\u6cd5\u8fde\u63a5\u4ef7\u683c\u6570\u636e\u5e93\uff0c\u5f53\u524d\u53ea\u663e\u793a\u5185\u7f6e\u6e05\u5355\u3002\u8bf7\u786e\u8ba4\u672c\u9875\u7531 EXE \u670d\u52a1\u6253\u5f00\u3002");
+      }
+      // 叠加当前库存数量（来自 result.json 的 inventory，按 CID 合并）
+      try {
+        const invData = await fetchJsonRetry("result.json").catch(() => null);
+        if (invData) {
+          const inv = invData.inventory || {};
+          allRows.forEach(item => {
+            const rec = inv[item.cid];
+            item.count = (rec && rec.count != null) ? rec.count : null;
+          });
+        }
+      } catch (e) { /* 拿不到库存时数量列显示—即可 */ }
+      renderTable();
+    }
+
+    async function refreshReportWithPrices() {
+      const uid = localStorage.getItem("bidking-uid") || "";
+      const clientId = getClientId();
+      const response = await fetch("/api/refresh", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid, client_id: clientId })
+      });
+      if (!response.ok && response.status !== 202) throw new Error("refresh");
+    }
+
+    async function savePrices(prices) {
+      const response = await fetch("/api/item-prices", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prices })
+      });
+      if (!response.ok) throw new Error("save");
+      return await response.json();
+    }
+
+    async function saveConfigFromInputs() {
+      const prices = collectPricesFromInputs();
+      if (!confirm("\u786e\u8ba4\u4fdd\u5b58\u9053\u5177\u4ef7\u683c\uff0c\u5e76\u7acb\u523b\u6309\u65b0\u4ef7\u683c\u91cd\u65b0\u8ba1\u7b97\u76c8\u4e8f\u5417\uff1f")) return;
+      showStatus("\u6b63\u5728\u4fdd\u5b58\u4ef7\u683c...");
+      try {
+        await savePrices(prices);
+        showStatus("\u4ef7\u683c\u5df2\u4fdd\u5b58\uff0c\u6b63\u5728\u91cd\u65b0\u7edf\u8ba1...");
+        await refreshReportWithPrices();
+        await loadDatabasePrices();   // 重新从数据库读取，确保表格显示已保存价格
+        showStatus("\u5df2\u63d0\u4ea4\u91cd\u65b0\u7edf\u8ba1\u3002\u8fd4\u56de\u7edf\u8ba1\u9875\u540e\u4f1a\u8bfb\u53d6\u6700\u65b0\u7ed3\u679c\u3002");
+      } catch (error) {
+        showStatus("\u4fdd\u5b58\u6216\u91cd\u65b0\u7edf\u8ba1\u5931\u8d25\uff0c\u8bf7\u786e\u8ba4\u672c\u9875\u7531 BidKing \u89e3\u6790\u5668 EXE \u6253\u5f00\u3002");
+      }
+    }
+
+    async function clearAllPrices() {
+      if (!confirm("\u786e\u8ba4\u628a\u6240\u6709\u65e0\u56fa\u5b9a\u4ef7\u503c\u9053\u5177\u4ef7\u683c\u6e05\u96f6\uff0c\u5e76\u7acb\u523b\u91cd\u65b0\u8ba1\u7b97\u76c8\u4e8f\u5417\uff1f")) return;
+      allRows = allRows.map(item => ({ ...item, price: 0 }));
+      renderTable();
+      showStatus("\u6b63\u5728\u6e05\u96f6\u4ef7\u683c...");
+      try {
+        await savePrices(collectPricesFromInputs());
+        await refreshReportWithPrices();
+        showStatus("\u6240\u6709\u65e0\u56fa\u5b9a\u4ef7\u503c\u9053\u5177\u4ef7\u683c\u5df2\u6e05\u96f6\uff0c\u5e76\u5df2\u63d0\u4ea4\u91cd\u65b0\u7edf\u8ba1\u3002");
+      } catch (error) {
+        showStatus("\u6e05\u96f6\u6216\u91cd\u65b0\u7edf\u8ba1\u5931\u8d25\uff0c\u8bf7\u786e\u8ba4\u672c\u9875\u7531 BidKing \u89e3\u6790\u5668 EXE \u6253\u5f00\u3002");
+      }
+    }
+
+    document.getElementById("saveBtn").addEventListener("click", saveConfigFromInputs);
+    document.getElementById("clearAllBtn").addEventListener("click", clearAllPrices);
+    // 返回统计页：App 打开时保持 ?app=1（不显示电脑版原型）；电脑端照旧
+    document.getElementById("backBtn").addEventListener("click", () => {
+      const isApp = /[?&]app=1/.test(location.search);
+      const target = isApp
+        ? "bidking_report.html?app=1&html_cache=20260606-formal-236"
+        : "bidking_report.html?html_cache=20260606-formal-236";
+      window.location.href = target;
+    });
+    searchInput.addEventListener("input", renderTable);
+
+    // 支持从报表页跳转：?cid=xxx 定位到对应道具（搜索过滤 + 高亮 + 滚动到可见）
+    function locateByCid(cid) {
+      if (!cid) return;
+      const keyword = cid.trim();
+      if (searchInput) searchInput.value = keyword;
+      renderTable();
+      const row = [...document.querySelectorAll("#itemPriceTableBody tr")].find(tr => {
+        const td = tr.querySelector("td.cid");
+        return td && td.textContent.trim() === keyword;
+      });
+      if (!row) return;
+      row.classList.add("locate-highlight");
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+      setTimeout(() => row.classList.remove("locate-highlight"), 2600);
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      await loadDatabasePrices();
+      const params = new URLSearchParams(location.search);
+      locateByCid(params.get("cid"));
+    });
+  </script>
+</body>
+</html>

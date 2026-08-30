@@ -1,0 +1,49 @@
+# ===== 凭据/密钥（绝不入库）=====
+# 用通配前缀兜底：以后新增任何 .bidking_* / .ngrok_* 凭据文件都自动被挡住
+.bidking*
+.ngrok*
+*.jks
+*.keystore
+app-android/local.properties
+
+# ===== 用户数据（本机生成，不入库）=====
+生涯数据库/
+item_prices.db
+item_prices_seed.db
+result.json
+result*.json
+silver_cache.json
+parse.lock.json
+
+# ===== 游戏日志（本机数据，且可能含个人信息）=====
+*.log
+Player*.log
+Player-prev.log
+
+# ===== 构建产物 =====
+*.exe
+*.apk
+app-android/build/
+app-android/.gradle/
+app-android/app/build/
+__pycache__/
+*.pyc
+src/_internal*
+
+# ===== AI 工具/编辑器/系统 =====
+.workbuddy/
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ===== 备份/临时文件（命名纪律：禁止入库）=====
+*.bak
+*.new
+*.tmp
+
+# ===== 开源分发排除（2026-08-30）=====
+docs/history/
+*.warn-bak
+.workbuddy/

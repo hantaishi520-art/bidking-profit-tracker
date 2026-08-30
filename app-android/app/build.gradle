@@ -1,0 +1,66 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+}
+
+// 2026-08-30：签名凭据外置——本文件随开源仓库公开，绝不能再写明文密码。
+// 真实密码只放 local.properties（已在 .gitignore）或环境变量，模板见 local.properties.example。
+def ksProps = new Properties()
+def ksPropsFile = rootProject.file("local.properties")
+if (ksPropsFile.exists()) {
+    ksProps.load(ksPropsFile.newDataInputStream())
+}
+def ksPassword = ksProps.getProperty("KEYSTORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+def ksAlias    = ksProps.getProperty("KEY_ALIAS") ?: System.getenv("KEY_ALIAS")
+def ksKeyPass  = ksProps.getProperty("KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD")
+def ksFile     = rootProject.file("bidking-release.keystore")
+def canSign    = ksFile.exists() && ksPassword && ksAlias && ksKeyPass
+
+android {
+    namespace "com.bidking.remote"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.bidking.remote"
+        minSdk 24
+        targetSdk 35
+        versionCode 17
+        versionName "1.10.3"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    signingConfigs {
+        release {
+            storeFile ksFile
+            storePassword ksPassword
+            keyAlias ksAlias
+            keyPassword ksKeyPass
+        }
+    }
+
+    buildTypes {
+        release {
+            // 2026-08-30：开启 R8 混淆 + 资源收缩（反编译可读性大降）。
+            // 本 App 反射使用极少，keep 规则见 proguard-rules.pro；改完必须真机回归。
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            // 没有 keystore 或没配密码时（例如刚 clone 开源仓库的人）退回默认签名，保证能构建。
+            if (canSign) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.24"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "com.google.android.material:material:1.12.0"
+    implementation "androidx.webkit:webkit:1.11.0"
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+}

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自绘 Toast（2026-08-30）：系统模板在部分设备上图标回落成默认机器人，
+     改用应用自己的图标 + 文本，前台展示任何设备表现一致 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingLeft="18dp"
+    android:paddingRight="22dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp"
+    android:background="@drawable/toast_bg">
+
+    <ImageView
+        android:id="@+id/toast_icon"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:src="@mipmap/ic_launcher"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/toast_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="12dp"
+        android:maxWidth="520dp"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp" />
+</LinearLayout>

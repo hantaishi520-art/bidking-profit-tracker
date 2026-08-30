@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BidKing 生涯数据统查</title>
+  <style>
+    /* App 模式（?app=1）：隐藏电脑端专属操作（导入/数据库管理/扫描日志），保留查看 */
+    html.app-mode .app-hide-import { display:none !important; }
+    html.app-mode .app-hide-scan { display:none !important; }
+    html.app-mode #careerDbPanel { display:none !important; }
+    /* App 模式：返回按钮显示，电脑模式隐藏 */
+    html.app-mode #careerBackBtn { display:inline-block; }
+    html:not(.app-mode) #careerBackBtn { display:none; }
+    @media (max-width:820px){ html.app-mode { zoom:.8; } }
+    /* App 模式（?app=1）：手机屏幕排版优化——统计卡 2 列、明细卡片化、筛选自动换行 */
+    html.app-mode body { padding: 14px; }
+    html.app-mode header { flex-direction: column; align-items: stretch; gap: 10px; }
+    html.app-mode h1 { font-size: 22px; }
+    html.app-mode .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    html.app-mode .metric { padding: 10px; }
+    html.app-mode .metric .value { font-size: 20px; }
+    html.app-mode .toolbar { flex-wrap: wrap; }
+    html.app-mode #careerTableScroll table { min-width: 0 !important; display: block; }
+    html.app-mode #careerTableScroll table thead { display: none; }
+    html.app-mode #careerTableScroll table tbody { display: block; }
+    html.app-mode #careerTableScroll table tbody tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      background: var(--panel);
+      box-shadow: 0 2px 10px rgba(52,42,28,.05);
+    }
+    html.app-mode #careerTableScroll table td { padding: 0; border: 0; height: auto; text-align: left; }
+    html.app-mode #careerTableScroll table td::before { display: block; color: var(--muted); font-size: 10px; margin-bottom: 2px; }
+    html.app-mode #careerTableScroll table td:nth-child(1)::before { content: "时间"; }
+    html.app-mode #careerTableScroll table td:nth-child(2)::before { content: "回合"; }
+    html.app-mode #careerTableScroll table td:nth-child(3)::before { content: "地图"; }
+    html.app-mode #careerTableScroll table td:nth-child(4)::before { content: "赢家"; }
+    html.app-mode #careerTableScroll table td:nth-child(5)::before { content: "道具"; }
+    html.app-mode #careerTableScroll table td:nth-child(6)::before { content: "拍下物品"; }
+    html.app-mode #careerTableScroll table td:nth-child(7)::before { content: "我的出价"; }
+    html.app-mode #careerTableScroll table td:nth-child(8)::before { content: "赢家出价"; }
+    html.app-mode #careerTableScroll table td:nth-child(9)::before { content: "对手最高价"; }
+    html.app-mode #careerTableScroll table td:nth-child(10)::before { content: "拍品价值"; }
+    html.app-mode #careerTableScroll table td:nth-child(11)::before { content: "展示盈亏"; }
+    html.app-mode #careerTableScroll table td:nth-child(12)::before { content: "我的盈亏"; }
+    html.app-mode #careerTableScroll table tbody tr.vs-spacer td { display: none; }
+    /* 生涯明细 toolbar 里的筛选控件横向排列改竖向（排除 #careerChips：地图筛选保持横向一排） */
+    html.app-mode .panel .toolbar[style*="box-shadow"]:not(#careerChips) { flex-direction: column; align-items: stretch; }
+    html.app-mode .panel .toolbar[style*="box-shadow"]:not(#careerChips) label { display: flex; align-items: center; gap: 6px; }
+    /* #careerChips 强制横向一排（手机上不换行、不竖排） */
+    html.app-mode #careerChips { flex-direction: row !important; flex-wrap: nowrap !important; overflow-x: auto; justify-content: flex-start; }
+    html.app-mode #careerChips .chip { flex: 0 0 auto; white-space: nowrap; }
+    /* App 模式：整体间距收拢（手机上板块紧凑） */
+    html.app-mode .app { max-width: 100%; }
+    html.app-mode .panel, html.app-mode .toolbar { padding: 10px; margin-bottom: 8px; }
+    html.app-mode h2 { font-size: 15px; margin-bottom: 6px; }
+    html.app-mode .metric { padding: 8px 10px; }
+    html.app-mode .metric .value { font-size: 18px; margin-top: 3px; }
+    html.app-mode button, html.app-mode input, html.app-mode select { min-height: 30px; font-size: 12px; }
+    html.app-mode .sub { font-size: 11px; }
+    html.app-mode table { font-size: 12px; }
+    html.app-mode #careerTableScroll table td { font-size: 12px; }
+    html.app-mode .table-scroll { max-height: 340px; }
+    /* 深色主题（App 模式与报表页全局联动） */
+    html[data-theme="dark"] {
+      --bg:#12171f; --panel:#171f29; --ink:#e8eef4; --muted:#8fa0b3; --line:#2a3646;
+      --accent:#40b99f; --good:#27ff9a; --bad:#ff5b61;
+      --good-bg:rgba(39,255,154,.10); --bad-bg:rgba(255,91,97,.11);
+    }
+    :root { --bg:#f4f1ea; --panel:#fffdf8; --ink:#1b2430; --muted:#69717d; --line:#d8d0c2; --accent:#1f7667; --good:#116248; --bad:#a33d2a; font-family:"Microsoft YaHei","Segoe UI",sans-serif; }
+    html[data-profit-colors="normal"] { --profit-good:var(--good); --profit-bad:var(--bad); }
+    html[data-profit-colors="inverted"] { --profit-good:var(--bad); --profit-bad:var(--good); }
+    html[data-profit-colors="normal"] { --profit-good-bg:rgba(17,98,72,.20); --profit-bad-bg:rgba(163,61,42,.20); }
+    html[data-profit-colors="inverted"] { --profit-good-bg:rgba(163,61,42,.20); --profit-bad-bg:rgba(17,98,72,.20); }
+    /* 深色主题下用深色的明亮盈亏色（2026-08-30：原 .10 透明度在两个主题下都几乎看不见） */
+    html[data-theme="dark"][data-profit-colors="normal"] { --profit-good-bg:rgba(39,255,154,.15); --profit-bad-bg:rgba(255,91,97,.15); }
+    html[data-theme="dark"][data-profit-colors="inverted"] { --profit-good-bg:rgba(255,91,97,.15); --profit-bad-bg:rgba(39,255,154,.15); }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:28px; color:var(--ink); background:linear-gradient(90deg,rgba(31,118,103,.08) 1px,transparent 1px),linear-gradient(180deg,rgba(31,118,103,.07) 1px,transparent 1px),var(--bg); background-size:34px 34px; }
+    .app { max-width:1360px; margin:0 auto; }
+    header { display:flex; justify-content:space-between; gap:16px; align-items:flex-end; margin-bottom:18px; }
+    h1 { margin:0; font-size:28px; }
+    .sub { color:var(--muted); font-size:13px; margin-top:6px; }
+    .toolbar,.panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; box-shadow:0 16px 40px rgba(52,42,28,.10); margin-bottom:14px; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    input,button { min-height:34px; border:1px solid var(--line); border-radius:6px; padding:7px 10px; background:var(--panel); color:var(--ink); font-weight:800; }
+    button { background:#252f3d; color:white; cursor:pointer; }
+    button.danger { background:#9f2f24; color:white; }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:14px; }
+    .metric { border:1px solid var(--line); border-radius:8px; padding:14px; background:var(--panel); }
+    .rate-toggle { cursor:pointer; opacity:.55; font-size:.85em; transition:opacity .2s,color .2s; user-select:none; }
+    .rate-toggle:hover { opacity:1; color:var(--accent); }
+    .metric .label { color:var(--muted); font-size:12px; font-weight:800; }
+    .metric .value { font-size:24px; font-weight:900; margin-top:6px; }
+    .db-status { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 18px; color:var(--muted); font-size:13px; line-height:1.7; }
+    .db-status strong { color:var(--ink); }
+    .table-scroll { overflow:auto; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; min-width:920px; }
+    th,td { padding:9px 8px; border-bottom:1px solid var(--line); text-align:right; font-size:13px; vertical-align:top; }
+    th:first-child,td:first-child, th:nth-child(3),td:nth-child(3), th:nth-child(4),td:nth-child(4), th:nth-child(5),td:nth-child(5), th:nth-child(6),td:nth-child(6) { text-align:left; }
+    h2 { margin:0 0 10px; font-size:18px; }
+    .profit-pos { color:var(--profit-good); font-weight:900; }
+    .profit-neg { color:var(--profit-bad); font-weight:900; }
+    tbody tr.win-positive { background:var(--profit-good-bg); }
+    tbody tr.win-negative { background:var(--profit-bad-bg); }
+    .chip { opacity:.45; }
+    .chip.active { opacity:1; background:#e2b93b; color:#111; border-color:#e2b93b; }
+    .won-summary { display:flex; align-items:center; gap:8px; color:var(--muted); font-weight:800; }
+    .won-toggle { min-height:26px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); cursor:pointer; font-weight:800; padding:3px 8px; }
+    .won-item-list { margin-top:7px; }
+    .won-item { display:inline-flex; align-items:center; gap:5px; margin:2px 4px 2px 0; padding:3px 7px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); font-weight:800; font-size:12px; }
+    .won-item-value { color:var(--accent); }
+    .won-item-quality { color:var(--muted); font-weight:700; }
+    .occ-scroll { max-height:240px; overflow:auto; margin-top:4px; }
+    .occ-item { display:flex; align-items:center; gap:10px; padding:3px 0; border-top:1px solid var(--line); }
+    .occ-time { font-weight:800; flex:1; }
+    .career-flash { animation: careerFlash 1.7s ease-out; }
+    @keyframes careerFlash { 0%{ background:#ffe49a; } 55%{ background:#ffe49a; } 100%{ background:transparent; } }
+    #careerTableScroll { max-height:74vh; position:relative; }
+    #careerRowStatus { flex:1; }
+    /* 虚拟滚动：固定行高 + 粘性表头 */
+    #careerTableScroll thead th { position:sticky; top:0; z-index:3; background:var(--panel); box-shadow:0 1px 0 var(--line); }
+    #careerTableScroll table td { height:44px; box-sizing:border-box; }
+    #careerTableScroll table .cell-ellipsis { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #careerTableBody tr.vs-spacer td { padding:0; border-width:0; line-height:0; }
+    .won-modal-backdrop { position:fixed; inset:0; background:rgba(20,16,10,.45); display:flex; align-items:center; justify-content:center; z-index:50; }
+    .won-modal-backdrop[hidden]{ display:none; }
+    .won-modal { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; width:min(92vw,440px); max-height:82vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.3); }
+    .won-modal-head { display:flex; justify-content:space-between; align-items:center; font-weight:900; margin-bottom:10px; gap:12px; }
+    .won-modal-close { min-height:30px; padding:2px 10px; background:#888; }
+    .won-modal-body { overflow:auto; display:flex; flex-wrap:wrap; gap:6px; align-content:flex-start; }
+    @media (max-width:800px){ body{padding:16px}.grid,.db-status{grid-template-columns:1fr} header{display:block} }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>生涯数据统查</h1>
+        <div class="sub" id="sourceMeta">读取本机缓存数据库，并兼容导入旧版 JSON/ZIP。</div>
+      </div>
+      <button class="app-back" id="careerBackBtn" type="button">返回统计页</button>
+      <button id="reloadBtn" type="button">重新读取</button>
+    </header>
+
+    <section class="toolbar">
+      <label>每 <input id="hourStepInput" type="number" min="1" max="24" value="6"> 小时统计拍品均值</label>
+      <label>高价值阈值 <input id="careerHighValueInput" type="number" min="1" value="100"> 万</label>
+      <span class="app-hide-import">
+      <label>导入历史 ZIP <input id="careerImportZipInput" type="file" accept=".zip,application/zip"></label>
+      <button id="careerImportBtn" type="button">导入 ZIP</button>
+      </span>
+    </section>
+
+    <section class="toolbar">
+      <label>账号
+        <select id="careerUidSelect" style="min-height:34px;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--panel);color:var(--ink);font-weight:800">
+          <option value="all">全部账号（合计）</option>
+        </select>
+      </label>
+      <span class="sub" id="careerUidHint">选择账号可分别查看各账号的生涯数据（避免两账号合计失真）。</span>
+    </section>
+
+    <section class="panel" id="careerDbPanel">
+      <h2>数据库管理</h2>
+      <div class="db-status" id="careerDbStatus">等待读取数据库状态</div>
+      <div class="toolbar" style="box-shadow:none;margin:12px 0 0;padding:0;border:0">
+        <label>保留最近 <input id="careerRetentionDays" type="number" min="0" value="0"> 天</label>
+        <button id="careerCleanBtn" type="button">清理旧数据</button>
+        <button class="danger" id="careerClearDbBtn" type="button">清空数据库</button>
+        <span class="sub" id="careerDbActionStatus"></span>
+      </div>
+    </section>
+
+    <section class="panel app-hide-scan">
+      <h2>扫描日志找缺失拍品</h2>
+      <div class="toolbar" style="box-shadow:none;margin:0 0 10px;padding:0;border:0">
+        <div class="sub" style="flex:1">扫描 <code>Player.log</code>，找出「日志里出现过、但物品表尚未收录」的新拍品。仅扫描尚未扫描过的场次（已扫描的不重复扫描），填好名称与价格后点「加入列表」会自动重新统计。</div>
+        <button id="scanMissingBtn" type="button">扫描日志找缺失拍品</button>
+      </div>
+      <div class="sub" id="missingStatus">点上方「扫描日志」开始（首次会扫描全部历史场次，后续只扫新增场次）。</div>
+
+      <h3 style="margin:18px 0 8px">待收录（日志中出现、尚未加入）</h3>
+      <div class="table-scroll" style="max-height:380px">
+        <table>
+          <thead><tr><th>CID</th><th>出现次数</th><th>出现地图</th><th>名称</th><th>价格</th><th>操作</th></tr></thead>
+          <tbody id="missingTableBody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">点上方「扫描日志」开始</td></tr></tbody>
+        </table>
+      </div>
+
+      <h3 style="margin:18px 0 8px">我添加的拍品（可删除）</h3>
+      <div class="table-scroll" style="max-height:300px">
+        <table>
+          <thead><tr><th>CID</th><th>名称</th><th>价格</th><th>操作</th></tr></thead>
+          <tbody id="addedTableBody"><tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">暂无自己添加的拍品</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="metric"><div class="label">总场次</div><div class="value" id="totalGames">-</div></div>
+      <div class="metric"><div class="label">生涯合计盈亏</div><div class="value" id="careerProfit">-</div></div>
+      <div class="metric"><div class="label" id="careerRateLabel">生涯拿仓率 <span class="rate-toggle" id="careerRateToggle" title="切换盈亏率" onclick="toggleCareerRate()">⇌</span></div><div class="value" id="careerWinRate">-</div></div>
+      <div class="metric"><div class="label">拍下局盈利 / 亏损</div><div class="value" id="winProfitCount">-</div></div>
+      <div class="metric"><div class="label">拍下局盈利 / 亏损数额</div><div class="value" id="winProfitAmount">-</div></div>
+    </section>
+    <section class="panel"><h2>各地点场次</h2><div id="mapCounts"></div></section>
+    <section class="panel"><h2>各地图大类拍品价值</h2><div id="careerMapValueStats"></div></section>
+    <section class="panel"><h2>24小时拍品价值平均值</h2><div id="hourlyAverages"></div></section>
+    <section class="panel"><h2>所有高价值物品</h2><div id="careerHighValueItems"></div></section>
+    <section class="panel">
+      <h2>生涯局内明细</h2>
+      <div class="toolbar" style="box-shadow:none;margin:0 0 10px;padding:0;border:0">
+        <button id="careerBtnAll" type="button">全部</button>
+        <button id="careerBtnWins" type="button">只看拍到</button>
+        <label class="sub">最近 <input id="careerLimitInput" type="number" min="1" placeholder="全部"> 场</label>
+        <label class="sub">从 <input id="careerFromTime" type="datetime-local"></label>
+        <label class="sub">到 <input id="careerToTime" type="datetime-local"></label>
+        <select id="careerProfitFilter">
+          <option value="all">全部盈亏</option>
+          <option value="profit">只看盈利</option>
+          <option value="loss">只看亏损</option>
+        </select>
+        <label class="sub">搜索 <input id="careerSearchInput" type="search" placeholder="物品 / 地图 / 赢家" style="min-height:34px;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--panel);color:var(--ink);font-weight:800;width:170px"></label>
+        <select id="careerSortSelect" style="min-height:34px;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--panel);color:var(--ink);font-weight:800">
+          <option value="ts_desc">时间（新→旧）</option>
+          <option value="ts_asc">时间（旧→新）</option>
+          <option value="profit_desc">盈亏（赚→亏）</option>
+          <option value="profit_asc">盈亏（亏→赚）</option>
+        </select>
+      </div>
+      <div class="toolbar" id="careerChips" style="box-shadow:none;margin:0 0 10px;padding:0;border:0">
+        <button class="chip active" type="button" data-prefix="21">快递</button>
+        <button class="chip active" type="button" data-prefix="22">仓库</button>
+        <button class="chip active" type="button" data-prefix="23">集装箱</button>
+        <button class="chip active" type="button" data-prefix="24">别墅</button>
+        <button class="chip active" type="button" data-prefix="25">残骸</button>
+        <button class="chip active" type="button" data-prefix="26">拍卖会</button>
+        <button class="chip active" type="button" data-prefix="56">竞拍之巅</button>
+      </div>
+      <div class="table-scroll" id="careerTableScroll">
+        <table>
+          <thead><tr><th>时间</th><th>回合</th><th>地图</th><th>赢家</th><th>道具</th><th>拍下物品</th><th>我的出价</th><th>赢家出价</th><th>对手最高价</th><th>拍品价值</th><th>展示盈亏</th><th>我的盈亏</th></tr></thead>
+          <tbody id="careerTableBody"><tr><td colspan="12">等待读取数据库</td></tr></tbody>
+        </table>
+      </div>
+      <div class="toolbar" style="box-shadow:none;margin:8px 0 0;padding:0;border:0;display:flex;align-items:center;gap:12px">
+        <span class="sub" id="careerRowStatus">共 0 场</span>
+        <button id="careerLoadMoreBtn" type="button" class="won-toggle">加载更多</button>
+      </div>
+    </section>
+  </main>
+  <script>
+    // App 模式（?app=1）：裁剪电脑端专属操作（导入/数据库管理/扫描日志）+ 全局设置联动
+    const APP_MODE = /[?&]app=1/.test(location.search);
+    if (APP_MODE) {
+      try { document.documentElement.classList.add("app-mode"); } catch (e) {}
+    }
+    // 深色主题（与报表页共享全局 key）
+    (function initCareerTheme() {
+      const theme = localStorage.getItem(APP_MODE ? "bidking-global-theme" : "bidking-theme") || "light";
+      document.documentElement.dataset.theme = theme;
+      const profit = localStorage.getItem(APP_MODE ? "bidking-global-profit-colors" : "bidking-profit-colors") || "normal";
+      document.documentElement.dataset.profitColors = profit;
+    })();
+    // 三合一切换（各地图大类 / 24h均价 / 高价值；App 模式 + 电脑模式都可用）
+    // App 模式：返回统计页（保持 ?app=1，不现电脑版）
+    const careerBackBtn = document.getElementById("careerBackBtn");
+    if (careerBackBtn) {
+      careerBackBtn.addEventListener("click", () => {
+        const target = APP_MODE
+          ? "bidking_report.html?app=1&html_cache=20260523-formal-231"
+          : "bidking_report.html?html_cache=20260523-formal-231";
+        window.location.href = target;
+      });
+      if (!APP_MODE) careerBackBtn.style.display = "none";
+    }
+    let games = [];
+    const careerUidSelect = document.getElementById("careerUidSelect");
+    let careerMode = "all";
+    let rateModeCareer = 'win'; // 'win'=拿仓率, 'profit'=盈亏率
+    let careerHighValueExpanded = false; // 高价值物品是否展开全部
+    let careerSearchText = ""; // 明细搜索关键词（物品/地图/赢家）
+    let careerSortMode = "ts_desc"; // 明细排序：ts_desc/ts_asc/profit_desc/profit_asc
+    let careerOccMap = {}; // 高价值物品 occId -> [gameIdx,...]，供"列出所有局"懒加载
+    function toggleCareerRate() {
+      rateModeCareer = rateModeCareer === 'win' ? 'profit' : 'win';
+      const label = document.getElementById('careerRateLabel');
+      if (rateModeCareer === 'profit') {
+        label.innerHTML = '生涯盈亏率 <span class="rate-toggle" id="careerRateToggle" title="切换拿仓率" onclick="toggleCareerRate()">⇌</span>';
+      } else {
+        label.innerHTML = '生涯拿仓率 <span class="rate-toggle" id="careerRateToggle" title="切换盈亏率" onclick="toggleCareerRate()">⇌</span>';
+      }
+      renderStatsSummary();
+    }
+    const careerPrefixes = new Set([21, 22, 23, 24, 25, 26, 56]);
+    const fmt = value => Number(value || 0).toLocaleString("zh-CN");
+    const signed = value => `${Number(value || 0) >= 0 ? "+" : ""}${fmt(value)}`;
+    const mapLabels = { 21: "快递", 22: "仓库", 23: "集装箱", 24: "别墅", 25: "残骸", 26: "拍卖会", 56: "竞拍之巅" };
+
+    function normalizeMapPrefix(mapId) {
+      const prefix = Math.floor(Number(mapId || 0) / 100);
+      const foldMap = { 31:21, 32:22, 33:23, 34:24, 35:25, 44:24, 45:25 };
+      return foldMap[prefix] !== undefined ? foldMap[prefix] : prefix;
+    }
+    function escapeHtml(value) {
+      return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+    }
+    function formatTs(ts) {
+      if (!ts) return "-";
+      return new Date(Number(ts) * 1000).toLocaleString("zh-CN", { hour12:false });
+    }
+    function applyProfitColorMode(mode) {
+      const next = mode === "inverted" ? "inverted" : "normal";
+      document.documentElement.dataset.profitColors = next;
+      document.documentElement.setAttribute("data-profit-colors", next);
+    }
+    function renderDbStatus(status) {
+      if (!status) return;
+      careerRetentionDays.value = Number(status.retention_days || 0);
+      careerDbStatus.innerHTML = `
+        <div>数据库位置：<strong>${escapeHtml(status.db_path || "")}</strong></div>
+        <div>当前总局数：<strong>${fmt(status.total_games)}</strong></div>
+        <div>最早记录：<strong>${status.earliest_ts ? formatTs(status.earliest_ts) : "暂无"}</strong></div>
+        <div>最新记录：<strong>${status.latest_ts ? formatTs(status.latest_ts) : "暂无"}</strong></div>
+        <div>清理策略：<strong>${Number(status.retention_days || 0) > 0 ? `保留最近 ${fmt(status.retention_days)} 天` : "永不自动清理"}</strong></div>
+        <div>上次导入：<strong>${escapeHtml(status.last_import || "暂无")}</strong></div>`;
+    }
+    async function loadDbStatusOnly() {
+      const response = await fetch("/api/career-db-status", { cache: "no-store" });
+      renderDbStatus(await response.json());
+    }
+    /* ---------- 本地缓存 + 增量拉取（2026-08-30）----------
+       经 ngrok 全量拉一次生涯数据要 2-3 分钟；生涯库日常只增不减（清理/导入是
+       罕见的本机操作），所以：
+       1) 全量数据缓存在 IndexedDB（48MB 超出 localStorage 限额，localStorage 装不下）；
+       2) 打开页面先拉 /api/career-db-status（毫秒级）对版本：total_games + latest_ts 都没变 → 直接用缓存渲染（秒开）；
+       3) 局数增加 → /api/career-data?since_ts=缓存最新ts 只拉新局合并（几十 KB）；
+       4) 合并后总数对不上（导入了旧档/清理过）→ 自动回退全量拉一次。
+       uid 分账过滤改在前端做（服务端已把 uid 注入每条对局），切换账号不再发请求。 */
+    const IDB_NAME = "bidking_career", IDB_STORE = "kv";
+    function idbOpen() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbGet(key) {
+      const db = await idbOpen();
+      try {
+        return await new Promise((resolve, reject) => {
+          const rq = db.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).get(key);
+          rq.onsuccess = () => resolve(rq.result);
+          rq.onerror = () => reject(rq.error);
+        });
+      } finally { db.close(); }
+    }
+    async function idbSet(key, val) {
+      const db = await idbOpen();
+      try {
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, "readwrite");
+          tx.objectStore(IDB_STORE).put(val, key);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      } finally { db.close(); }
+    }
+    // 带重试的 JSON 拉取：ngrok 免费版会对「App 注入完成前的首请求」回警告页 HTML，
+    // 解析失败/非 2xx 自动重试（注入通常几百毫秒内完成，重试即恢复）
+    async function fetchJsonRetry(url, tries = 3, delayMs = 1500) {
+      let lastErr = null;
+      for (let i = 0; i < tries; i++) {
+        if (i > 0) await new Promise(res => setTimeout(res, delayMs));
+        try {
+          const r = await fetch(url, { cache: "no-store" });
+          if (!r.ok) { lastErr = new Error("HTTP " + r.status); continue; }
+          return await r.json();
+        } catch (e) { lastErr = e; }
+      }
+      throw lastErr || new Error("fetch failed");
+    }
+    function computeUids(games) {
+      const m = new Map();
+      games.forEach(g => { const u = g.uid || "(未知账号)"; m.set(u, (m.get(u) || 0) + 1); });
+      return Array.from(m, ([uid, count]) => ({ uid, count })).sort((a, b) => b.count - a.count);
+    }
+    let allGamesCache = [];
+    let careerDbStatusCache = null;
+    function applyAllGames(allGames) {
+      allGamesCache = allGames;
+      const uids = computeUids(allGames);
+      careerUidSelect.innerHTML = '<option value="all">全部账号（合计）</option>' +
+        uids.map(u => `<option value="${escapeHtml(u.uid)}">${escapeHtml(u.uid)}（${fmt(u.count)} 场）</option>`).join("");
+    }
+    async function initCareerData() {
+      sourceMeta.textContent = "正在读取生涯数据库…";
+      let status = careerDbStatusCache;
+      try {
+        status = await fetchJsonRetry("/api/career-db-status");
+        careerDbStatusCache = status;
+      } catch (e) { /* 拿不到状态时若还有缓存仍可离线展示 */ }
+      const cache = await idbGet("career_cache").catch(() => null);
+      let allGames = null;
+      let fromCache = false;
+      if (cache && status && Array.isArray(cache.games) && cache.games.length
+          && cache.total_games === status.total_games && cache.latest_ts === status.latest_ts) {
+        allGames = cache.games;                       // 版本一致：秒开
+        fromCache = true;
+      }
+      if (allGames == null && cache && status && Array.isArray(cache.games) && cache.games.length
+          && status.total_games > cache.total_games && cache.latest_ts) {
+        // 只增场景：增量拉新局合并（>= 防同秒新局漏拉，前端按 uid|ts 去重）
+        try {
+          const d = await fetchJsonRetry("/api/career-data?since_ts=" + encodeURIComponent(cache.latest_ts));
+          const seen = new Set(cache.games.map(g => (g.uid || "") + "|" + g.ts));
+          const fresh = (d.games || []).filter(g => !seen.has((g.uid || "") + "|" + g.ts));
+          const merged = fresh.concat(cache.games);
+          if (merged.length === status.total_games) {
+            allGames = merged;
+            status = d.db_status || status;
+            careerDbStatusCache = status;
+          }
+        } catch (e) { /* 增量失败 → 落到全量 */ }
+      }
+      if (allGames == null) {
+        try {
+          const d = await fetchJsonRetry("/api/career-data");
+          allGames = Array.isArray(d.games) ? d.games : [];
+          status = d.db_status || status;
+          careerDbStatusCache = status;
+        } catch (e) {
+          if (cache && Array.isArray(cache.games) && cache.games.length) {
+            allGames = cache.games; fromCache = true;   // 全量也失败但有缓存 → 离线展示
+          } else {
+            sourceMeta.textContent = "无法连接生涯数据库，请确认本页由 EXE 服务打开后重试。";
+            return;
+          }
+        }
+      }
+      if (status) {
+        idbSet("career_cache", { games: allGames, total_games: status.total_games,
+                                 latest_ts: status.latest_ts, saved_at: Date.now() }).catch(() => {});
+      }
+      applyAllGames(allGames);
+      const uids = computeUids(allGames);
+      const initial = (uids[0] && uids[0].uid) || "all";
+      careerUidSelect.value = initial;
+      renderDbStatus(status);
+      await loadCareerData(initial);
+      if (fromCache) sourceMeta.textContent += "（本地缓存秒开）";
+    }
+    async function loadCareerData(uid) {
+      if (uid === undefined) uid = careerUidSelect.value || "all";
+      games = uid === "all" ? allGamesCache.slice() : allGamesCache.filter(g => g.uid === uid);
+      games.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      games.forEach((g, i) => { g._idx = i; });
+      sourceMeta.textContent = `数据库合计 ${fmt(careerDbStatusCache ? careerDbStatusCache.total_games : allGamesCache.length)} 场；当前${uid === "all" ? "全部账号" : uid}显示 ${fmt(games.length)} 场`;
+      renderDbStatus(careerDbStatusCache);
+      renderCareer();
+    }
+    async function importCareerZip() {
+      const file = careerImportZipInput.files && careerImportZipInput.files[0];
+      if (!file) return;
+      careerDbActionStatus.textContent = "正在导入...";
+      const response = await fetch("/api/career-import", { method: "POST", body: await file.arrayBuffer() });
+      const data = await response.json();
+      careerDbActionStatus.textContent = `导入 ${fmt(data.inserted)} 局，跳过重复 ${fmt(data.skipped_duplicates)} 局，无效文件 ${fmt(data.invalid_files)} 个`;
+      await initCareerData();
+    }
+    async function cleanCareerDb() {
+      const retention = Number(careerRetentionDays.value || 0);
+      const response = await fetch("/api/career-db-clean", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ retention_days: retention }) });
+      const data = await response.json();
+      careerDbActionStatus.textContent = `已清理 ${fmt(data.deleted)} 局`;
+      await initCareerData();
+    }
+    async function clearCareerDb() {
+      if (!window.confirm("确认清空数据库中的所有生涯数据？此操作不会删除 Player.log 和 result.json。")) return;
+      const response = await fetch("/api/career-db-clear", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ confirm: true }) });
+      const data = await response.json();
+      careerDbActionStatus.textContent = `已清空 ${fmt(data.deleted)} 局`;
+      await initCareerData();
+    }
+    function renderCareer() {
+      totalGames.textContent = fmt(games.length);
+      renderStatsSummary();
+      renderMapCounts();
+      renderCareerMapValueStats();
+      renderHourlyAverages();
+      renderCareerHighValueItems();
+      setCareerRows(true);
+    }
+    function renderStatsSummary() {
+      const wins = games.filter(game => game.is_win);
+      const profitableWins = wins.filter(game => Number(game.my_profit || 0) > 0);
+      const profitRows = wins.filter(game => Number(game.my_profit || 0) >= 0);
+      const lossRows = wins.filter(game => Number(game.my_profit || 0) < 0);
+      const profitAmount = profitRows.reduce((sum, game) => sum + Number(game.my_profit || 0), 0);
+      const lossAmount = lossRows.reduce((sum, game) => sum + Number(game.my_profit || 0), 0);
+      const totalProfit = games.reduce((sum, game) => sum + Number(game.my_profit || 0), 0);
+      careerProfit.textContent = signed(totalProfit);
+      // 拿仓率/盈亏率 根据当前 mode 显示
+      const winRate = games.length ? (wins.length / games.length * 100) : 0;
+      const profitRate = wins.length ? (profitableWins.length / wins.length * 100) : 0;
+      careerWinRate.textContent = rateModeCareer === 'profit'
+        ? `${profitRate.toFixed(1)}%`
+        : `${winRate.toFixed(1)}%`;
+      winProfitCount.textContent = `${fmt(profitRows.length)} / ${fmt(lossRows.length)}`;
+      winProfitAmount.textContent = `${signed(profitAmount)} / ${signed(lossAmount)}`;
+    }
+    function renderMapCounts() {
+      const rows = Object.entries(mapLabels).map(([prefix, label]) => {
+        const scoped = games.filter(game => normalizeMapPrefix(game.map_id) === Number(prefix));
+        const profit = scoped.reduce((sum, game) => sum + Number(game.my_profit || 0), 0);
+        return { label, count: scoped.length, profit };
+      });
+      mapCounts.innerHTML = `<table><thead><tr><th>地点</th><th>场次</th><th>地点盈亏</th></tr></thead><tbody>${rows.map(row => `<tr><td>${row.label}</td><td>${fmt(row.count)}</td><td class="${Number(row.profit || 0) >= 0 ? "profit-pos" : "profit-neg"}">${signed(row.profit)}</td></tr>`).join("")}</tbody></table>`;
+    }
+    function buildMapValueStats(rows) {
+      const groups = Object.entries(mapLabels).map(([prefix, label]) => ({ prefix:Number(prefix), label, count:0, total:0, max:0, min:0 }));
+      const groupByPrefix = new Map(groups.map(group => [group.prefix, group]));
+      rows.forEach(game => {
+        const value = Number(game.actual_value || 0);
+        if (!Number.isFinite(value) || value <= 0) return;
+        const group = groupByPrefix.get(normalizeMapPrefix(game.map_id));
+        if (!group) return;
+        group.count += 1; group.total += value; group.max = group.count === 1 ? value : Math.max(group.max, value); group.min = group.count === 1 ? value : Math.min(group.min, value);
+      });
+      return groups.map(group => ({ ...group, avg: group.count ? Math.round(group.total / group.count) : 0 }));
+    }
+    function renderCareerMapValueStats() {
+      const rows = buildMapValueStats(games);
+      careerMapValueStats.innerHTML = `<table><thead><tr><th>地图大类</th><th>场次</th><th>最高拍品</th><th>最低拍品</th><th>平均拍品</th></tr></thead><tbody>${rows.map(row => `<tr><td>${row.label}</td><td>${fmt(row.count)}</td><td>${fmt(row.max)}</td><td>${fmt(row.min)}</td><td>${fmt(row.avg)}</td></tr>`).join("")}</tbody></table>`;
+    }
+    function renderHourlyAverages() {
+      const step = Math.max(1, Math.min(24, Number(hourStepInput.value || 6)));
+      const rows = [];
+      for (let hour = 0; hour < 24; hour += step) {
+        const end = Math.min(24, hour + step);
+        const scoped = games.filter(game => { const h = new Date(Number(game.ts || 0) * 1000).getHours(); return h >= hour && h < end; });
+        const avg = scoped.length ? scoped.reduce((sum, game) => sum + Number(game.actual_value || 0), 0) / scoped.length : 0;
+        rows.push({ label:`${String(hour).padStart(2, "0")}:00-${String(end).padStart(2, "0")}:00`, count:scoped.length, avg:Math.round(avg) });
+      }
+      hourlyAverages.innerHTML = `<table><thead><tr><th>时间段</th><th>场次</th><th>拍品均值</th></tr></thead><tbody>${rows.map(row => `<tr><td>${row.label}</td><td>${fmt(row.count)}</td><td>${fmt(row.avg)}</td></tr>`).join("")}</tbody></table>`;
+    }
+    function renderCareerHighValueItems() {
+      const threshold = Number(careerHighValueInput.value || 100) * 10000;
+      const map = new Map();
+      games.forEach(game => {
+        if (!game.is_win) return; // 只统计我赢下并拿到物品的对局，排除输掉的对局
+        (game.won_items || []).forEach(item => {
+          const value = Number(item.value || 0);
+          if (value < threshold) return;
+          const key = item.name || item.cid || "?";
+          const row = map.get(key) || { name:key, count:0, value, gids:[], lastGid: game._idx, lastTs: Number(game.ts || 0) };
+          row.count += Number(item.count || 1);
+          row.value = Math.max(row.value, value);
+          const gt = Number(game.ts || 0);
+          if (gt >= row.lastTs) { row.lastTs = gt; row.lastGid = game._idx; }
+          row.gids.push(game._idx);
+          map.set(key, row);
+        });
+      });
+      const items = Array.from(map.values()).sort((a, b) => b.value - a.value || b.count - a.count);
+      if (careerSearchText) {
+        const q = careerSearchText;
+        items = items.filter(it => (it.name || "").toLowerCase().includes(q));
+      }
+      careerOccMap = {};
+      items.forEach((it, i) => { it.occId = i; careerOccMap[i] = it.gids; });
+      if (!items.length) {
+        careerHighValueItems.innerHTML = careerSearchText ? "搜索无匹配的高价值物品" : "暂无符合条件的物品";
+        return;
+      }
+      const visible = careerHighValueExpanded ? items : items.slice(0, 3);
+      const hiddenCount = items.length - visible.length;
+      let html = `<table><thead><tr><th>物品名</th><th>数量</th><th>单件价值</th><th>前往该局</th></tr></thead><tbody>${visible.map(item => `
+        <tr>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${fmt(item.count)}</td>
+          <td>${fmt(item.value)}</td>
+          <td>
+            <button class="won-toggle" type="button" data-jump-gid="${item.lastGid}">前往该局</button>
+            <button class="won-toggle" type="button" data-occ-toggle="${item.occId}">全部 ${fmt(item.gids.length)} 局</button>
+          </td>
+        </tr>
+        <tr class="occ-row" id="occ-${item.occId}" hidden><td colspan="4"><div class="occ-scroll" id="occlist-${item.occId}"></div></td></tr>
+      `).join("")}</tbody></table>`;
+      if (hiddenCount > 0) {
+        html += `<button type="button" id="careerHighValueMoreBtn" class="won-toggle" style="margin-top:8px">加载更多（剩余${fmt(hiddenCount)}个）</button>`;
+      } else if (careerHighValueExpanded && items.length > 3) {
+        html += `<button type="button" id="careerHighValueMoreBtn" class="won-toggle" style="margin-top:8px">收起</button>`;
+      }
+      careerHighValueItems.innerHTML = html;
+    }
+    function renderOccList(occId) {
+      const gids = careerOccMap[occId] || [];
+      const listEl = document.getElementById("occlist-" + occId);
+      if (!listEl || listEl.dataset.filled) return;
+      const sorted = gids.slice().sort((a, b) => Number(games[b].ts || 0) - Number(games[a].ts || 0));
+      const cap = 60;
+      const show = sorted.slice(0, cap);
+      const rows = show.map(gid => {
+        const g = games[gid];
+        return `<div class="occ-item"><span class="occ-time">${escapeHtml(g.time || formatTs(g.ts))}</span><button class="won-toggle" type="button" data-jump-gid="${gid}">前往</button></div>`;
+      }).join("");
+      const more = sorted.length > cap ? `<div class="sub" style="padding:4px 0">仅显示最近 ${cap} 局，共 ${fmt(sorted.length)} 局</div>` : "";
+      listEl.innerHTML = rows + more;
+      listEl.dataset.filled = "1";
+    }
+    careerHighValueItems.addEventListener("click", event => {
+      const more = event.target.closest("#careerHighValueMoreBtn");
+      if (more) { careerHighValueExpanded = !careerHighValueExpanded; renderCareerHighValueItems(); return; }
+      const occ = event.target.closest("[data-occ-toggle]");
+      if (occ) {
+        const occId = occ.getAttribute("data-occ-toggle");
+        const row = document.getElementById("occ-" + occId);
+        if (!row) return;
+        if (row.hidden) { renderOccList(occId); row.hidden = false; occ.textContent = "收起"; }
+        else { row.hidden = true; occ.textContent = `全部 ${fmt((careerOccMap[occId] || []).length)} 局`; }
+        return;
+      }
+      const jump = event.target.closest("[data-jump-gid]");
+      if (jump) jumpToCareerGame(jump.getAttribute("data-jump-gid"));
+    });
+    function careerGameMatchesSearch(game) {
+      const q = careerSearchText;
+      if (!q) return true;
+      if (String(game.map_name || ("地图" + (game.map_id || ""))).toLowerCase().includes(q)) return true;
+      if (String(game.winner_name || "").toLowerCase().includes(q)) return true;
+      if ((game.won_items || []).some(it => String(it.name || it.cid || "").toLowerCase().includes(q))) return true;
+      if ((game.items_used || []).some(it => String(it.name || "").toLowerCase().includes(q))) return true;
+      return false;
+    }
+    function filteredCareerGames() {
+      const limit = Math.max(0, Number(careerLimitInput.value || 0));
+      const fromTs = careerFromTime.value ? Math.floor(new Date(careerFromTime.value).getTime() / 1000) : null;
+      const toTs = careerToTime.value ? Math.floor(new Date(careerToTime.value).getTime() / 1000) : null;
+      const profitFilter = careerProfitFilter.value || "all";
+      let rows = games
+        .filter(game => careerMode === "all" || game.is_win)
+        .filter(game => careerPrefixes.has(normalizeMapPrefix(game.map_id)))
+        .filter(game => fromTs === null || Number(game.ts || 0) >= fromTs)
+        .filter(game => toTs === null || Number(game.ts || 0) <= toTs)
+        .filter(game => {
+          const profit = Number(game.my_profit || 0);
+          if (profitFilter === "profit") return profit > 0;
+          if (profitFilter === "loss") return profit < 0;
+          return true;
+        })
+        .filter(careerGameMatchesSearch);
+      return limit > 0 ? rows.slice(0, limit) : rows;
+    }
+    function sortCareerRows(arr) {
+      const m = careerSortMode;
+      arr.sort((a, b) => {
+        if (m === "ts_asc") return Number(a.ts || 0) - Number(b.ts || 0);
+        if (m === "ts_desc") return Number(b.ts || 0) - Number(a.ts || 0);
+        const pa = Number(a.my_profit || 0), pb = Number(b.my_profit || 0);
+        if (m === "profit_desc") return pb - pa;
+        if (m === "profit_asc") return pa - pb;
+        return Number(b.ts || 0) - Number(a.ts || 0);
+      });
+      return arr;
+    }
+    // ===== 明细表：虚拟滚动（固定行高，仅渲染可见行，千/万场不卡） =====
+    const ROW_H = 44;          // 固定行高（与 CSS td height 一致）
+    const VBUFFER = 8;         // 视口上下各多渲染的缓冲行
+    let currentFilteredRows = [];
+    let careerRenderScheduled = false;
+    const careerTableScroll = document.getElementById("careerTableScroll");
+    const careerRowStatus = document.getElementById("careerRowStatus");
+    const careerLoadMoreBtn = document.getElementById("careerLoadMoreBtn");
+    function buildCareerRowsHtml(rows) {
+      return rows.map((game) => {
+        const items = (game.items_used || []).map(item => `R${item.round}: ${escapeHtml(item.name || "?")}`).join(" -> ") || "--";
+        const wonCount = (game.won_items || []).length;
+        const wonCell = wonCount ? `<button class="won-toggle" type="button" data-won-detail="${game._idx}">${fmt(wonCount)} 件 ▸</button>` : "--";
+        const dispClass = Number(game.disp_profit || 0) >= 0 ? "profit-pos" : "profit-neg";
+        const myClass = Number(game.my_profit || 0) >= 0 ? "profit-pos" : "profit-neg";
+        const rowClass = game.is_win ? (Number(game.my_profit || 0) >= 0 ? "win-positive" : "win-negative") : "";
+        return `<tr id="career-game-${game._idx}" class="${rowClass}"><td>${escapeHtml(game.time || formatTs(game.ts))}</td><td>${fmt(game.rounds)}</td><td>${escapeHtml(game.map_name || ("地图"+(game.map_id||"")))}</td><td>${escapeHtml(game.winner_name || "?")}</td><td class="cell-ellipsis" title="${escapeHtml(items)}">${items}</td><td>${wonCell}</td><td>${fmt(game.final_bid)}</td><td>${fmt(game.winner_final_bid)}</td><td>${fmt(game.opponent_bid)}</td><td>${fmt(game.actual_value)}</td><td class="${dispClass}">${signed(game.disp_profit)}</td><td class="${myClass}">${signed(game.my_profit)}</td></tr>`;
+      }).join("");
+    }
+    function updateCareerRowStatus() {
+      const total = currentFilteredRows.length;
+      if (!total) { careerRowStatus.textContent = "共 0 场"; return; }
+      const visible = Math.min(total, Math.ceil(careerTableScroll.clientHeight / ROW_H) + VBUFFER * 2);
+      careerRowStatus.textContent = `共 ${fmt(total)} 场（虚拟滚动：仅渲染约 ${fmt(visible)} 行可见，滚动流畅）`;
+    }
+    function renderVirtualRows() {
+      const total = currentFilteredRows.length;
+      if (!total) {
+        careerTableBody.innerHTML = '<tr><td colspan="12">暂无数据库记录</td></tr>';
+        updateCareerRowStatus();
+        return;
+      }
+      const scrollTop = careerTableScroll.scrollTop;
+      const viewport = careerTableScroll.clientHeight;
+      let start = Math.floor(scrollTop / ROW_H) - VBUFFER;
+      if (start < 0) start = 0;
+      const visibleCount = Math.ceil(viewport / ROW_H) + VBUFFER * 2;
+      let end = start + visibleCount;
+      if (end > total) end = total;
+      const html = buildCareerRowsHtml(currentFilteredRows.slice(start, end));
+      careerTableBody.innerHTML =
+        `<tr class="vs-spacer" style="height:${start * ROW_H}px"><td colspan="12"></td></tr>` +
+        html +
+        `<tr class="vs-spacer" style="height:${(total - end) * ROW_H}px"><td colspan="12"></td></tr>`;
+      updateCareerRowStatus();
+      careerLoadMoreBtn.style.display = scrollTop > 300 ? "" : "none";
+      careerLoadMoreBtn.textContent = "↑ 回到顶部";
+    }
+    function scheduleVirtualRender() {
+      if (careerRenderScheduled) return;
+      careerRenderScheduled = true;
+      requestAnimationFrame(() => { careerRenderScheduled = false; renderVirtualRows(); });
+    }
+    function setCareerRows(reset) {
+      if (reset) {
+        currentFilteredRows = filteredCareerGames();
+        sortCareerRows(currentFilteredRows);
+        if (!currentFilteredRows.length) {
+          careerTableBody.innerHTML = '<tr><td colspan="12">暂无数据库记录</td></tr>';
+          updateCareerRowStatus();
+          return;
+        }
+        careerTableScroll.scrollTop = 0;
+      }
+      renderVirtualRows();
+    }
+    function jumpToCareerGame(gid) {
+      gid = Number(gid);
+      const pos = currentFilteredRows.findIndex(g => g._idx === gid);
+      if (pos < 0) {
+        alert("该局当前被筛选条件隐藏（如「只看拍到」或取消了对应地图筛选），无法跳转。请调整筛选后重试。");
+        return;
+      }
+      careerTableScroll.scrollTop = Math.max(0, pos * ROW_H - 4);
+      renderVirtualRows();
+      const el = document.getElementById("career-game-" + gid);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.remove("career-flash");
+        void el.offsetWidth;
+        el.classList.add("career-flash");
+        setTimeout(() => el.classList.remove("career-flash"), 1700);
+      }
+    }
+    // ===== 拍下物品弹窗（不改行高，配合虚拟滚动） =====
+    let wonModal = null;
+    function showWonItemsModal(game) {
+      if (!wonModal) {
+        wonModal = document.createElement("div");
+        wonModal.className = "won-modal-backdrop";
+        wonModal.hidden = true;
+        wonModal.innerHTML = '<div class="won-modal"><div class="won-modal-head"><span id="wonModalTitle"></span><button class="won-modal-close" type="button" aria-label="关闭">✕</button></div><div class="won-modal-body" id="wonModalBody"></div></div>';
+        document.body.appendChild(wonModal);
+        wonModal.addEventListener("click", e => {
+          if (e.target === wonModal || e.target.closest(".won-modal-close")) wonModal.hidden = true;
+        });
+      }
+      document.getElementById("wonModalTitle").textContent = `${game.time || formatTs(game.ts)} · ${game.map_name || ("地图" + (game.map_id || ""))}`;
+      const items = (game.won_items || []).slice().sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
+      const list = items.map(item => {
+        const quality = item.quality ? `<span class="won-item-quality">Q${escapeHtml(item.quality)}</span>` : "";
+        return `<span class="won-item" title="CID ${escapeHtml(item.cid || "")}">${escapeHtml(item.name || "?")} ${quality}<span class="won-item-value">${fmt(item.value)}</span></span>`;
+      }).join("");
+      document.getElementById("wonModalBody").innerHTML = list || '<div class="sub">本局未拍下物品</div>';
+      wonModal.hidden = false;
+    }
+    // 2026-08-30 修复：直接传函数会把点击事件对象当成 uid 参数（页面显示「当前[object PointerEvent]显示 0 场」）
+    reloadBtn.addEventListener("click", () => initCareerData());
+    careerUidSelect.addEventListener("change", () => loadCareerData());
+    careerImportBtn.addEventListener("click", importCareerZip);
+    careerCleanBtn.addEventListener("click", cleanCareerDb);
+    careerClearDbBtn.addEventListener("click", clearCareerDb);
+    careerTableBody.addEventListener("click", event => {
+      const detail = event.target.closest("[data-won-detail]");
+      if (detail) { showWonItemsModal(games[Number(detail.dataset.wonDetail)]); }
+    });
+    careerBtnAll.addEventListener("click", () => {
+      careerMode = "all";
+      careerBtnAll.classList.add("active");
+      careerBtnWins.classList.remove("active");
+      setCareerRows(true);
+    });
+    careerBtnWins.addEventListener("click", () => {
+      careerMode = "wins";
+      careerBtnWins.classList.add("active");
+      careerBtnAll.classList.remove("active");
+      setCareerRows(true);
+    });
+    careerLimitInput.addEventListener("change", () => setCareerRows(true));
+    careerFromTime.addEventListener("change", () => setCareerRows(true));
+    careerToTime.addEventListener("change", () => setCareerRows(true));
+    careerProfitFilter.addEventListener("change", () => setCareerRows(true));
+    careerSearchInput.addEventListener("input", () => { careerSearchText = (careerSearchInput.value || "").trim().toLowerCase(); setCareerRows(true); renderCareerHighValueItems(); });
+    careerSortSelect.addEventListener("change", () => { careerSortMode = careerSortSelect.value; setCareerRows(true); });
+    careerChips.addEventListener("click", event => {
+      const button = event.target.closest(".chip");
+      if (!button) return;
+      const prefix = Number(button.dataset.prefix);
+      if (careerPrefixes.has(prefix)) {
+        careerPrefixes.delete(prefix);
+        button.classList.remove("active");
+      } else {
+        careerPrefixes.add(prefix);
+        button.classList.add("active");
+      }
+      setCareerRows(true);
+    });
+    hourStepInput.addEventListener("change", renderHourlyAverages);
+    careerTableScroll.addEventListener("scroll", scheduleVirtualRender);
+    careerLoadMoreBtn.addEventListener("click", () => { careerTableScroll.scrollTop = 0; renderVirtualRows(); });
+    careerHighValueInput.addEventListener("change", () => { careerHighValueExpanded = false; renderCareerHighValueItems(); });
+    applyProfitColorMode(localStorage.getItem("bidking-profit-colors") || "normal");
+
+    // ===== 扫描日志找缺失拍品（增量：只扫未扫场次） =====
+    const missingTableBody = document.getElementById("missingTableBody");
+    const addedTableBody = document.getElementById("addedTableBody");
+    const missingStatus = document.getElementById("missingStatus");
+
+    function getClientId() {
+      let id = localStorage.getItem("bidking-client-id");
+      if (!id) { id = `${Date.now()}-${Math.random().toString(16).slice(2)}`; localStorage.setItem("bidking-client-id", id); }
+      return id;
+    }
+    async function refreshReportWithPrices() {
+      const uid = localStorage.getItem("bidking-uid") || "";
+      const clientId = getClientId();
+      const response = await fetch("/api/refresh", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid, client_id: clientId }) });
+      if (!response.ok && response.status !== 202) throw new Error("refresh");
+    }
+    function cssEscape(v) { return String(v).replace(/["\\]/g, "\\$&"); }
+
+    async function loadMissing(auto = false) {
+      if (!auto) missingStatus.textContent = "正在扫描日志...";
+      try {
+        const resp = await fetch("/api/missing-items", { cache: "no-store" });
+        if (!resp.ok) throw new Error("api");
+        const data = await resp.json();
+        if (!data.log_found) {
+          if (!auto) missingStatus.textContent = "生涯数据库还没有对局数据，请先点「解析 / 刷新」生成战绩后再扫描。";
+          return;
+        }
+        renderMissing(data.missing || []);
+        renderAdded(data.added || []);
+        const total = (data.missing || []).length;
+        const scanned = data.scanned_games || 0;
+        const skipped = data.skipped_games || 0;
+        if (!auto) {
+          if (total) {
+            missingStatus.textContent = `本次扫描 ${fmt(scanned)} 场（跳过已扫描 ${fmt(skipped)} 场），发现 ${fmt(total)} 个新缺失拍品，填好名称与价格后点「加入列表」。`;
+          } else {
+            missingStatus.textContent = `本次扫描 ${fmt(scanned)} 场（跳过已扫描 ${fmt(skipped)} 场），没有发现新的未收录拍品，物品表已齐全 🎉`;
+          }
+        } else if (total) {
+          missingStatus.textContent = `🔄 自动扫描发现 ${fmt(total)} 个新缺失拍品，已加入「待收录」，填好名称与价格后点「加入列表」。`;
+        }
+      } catch (e) {
+        if (!auto) missingStatus.textContent = "扫描失败，请确认本页由 BidKing 解析器 EXE 打开。";
+      }
+    }
+    function missingRowHtml(it) {
+      return `<tr>
+        <td class="cid">${escapeHtml(it.cid)}</td>
+        <td>${fmt(it.count)}</td>
+        <td>${escapeHtml((it.maps || []).join("、") || "-")}</td>
+        <td><input type="text" data-missing-name="${escapeHtml(it.cid)}" placeholder="物品名称"></td>
+        <td><input type="number" min="0" step="1" value="0" data-missing-price="${escapeHtml(it.cid)}"></td>
+        <td><button class="add-btn" type="button" data-add-cid="${escapeHtml(it.cid)}">加入列表</button></td>
+      </tr>`;
+    }
+    function renderMissing(list) {
+      // 增量渲染：移除已不再缺失的行、追加新发现的行，保留用户已填写的输入不被清空
+      const have = new Set(list.map(it => String(it.cid)));
+      [...missingTableBody.querySelectorAll('tr')].forEach(tr => {
+        const nameEl = tr.querySelector('[data-missing-name]');
+        if (!nameEl) return;
+        if (!have.has(nameEl.getAttribute('data-missing-name'))) tr.remove();
+      });
+      const existing = new Set([...missingTableBody.querySelectorAll('[data-missing-name]')].map(e => e.getAttribute('data-missing-name')));
+      const fresh = list.filter(it => !existing.has(String(it.cid))).map(missingRowHtml).join("");
+      if (fresh) missingTableBody.insertAdjacentHTML('beforeend', fresh);
+      if (!missingTableBody.querySelector('tr')) {
+        missingTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">没有未收录拍品 🎉</td></tr>';
+      }
+    }
+    function renderAdded(list) {
+      if (!list.length) {
+        addedTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">暂无自己添加的拍品</td></tr>';
+        return;
+      }
+      addedTableBody.innerHTML = list.map(it => `
+        <tr>
+          <td class="cid">${escapeHtml(it.cid)}</td>
+          <td>${escapeHtml(it.name || "(未命名)")}</td>
+          <td>${fmt(it.price)}</td>
+          <td><button class="danger del-btn" type="button" data-del-cid="${escapeHtml(it.cid)}">删除</button></td>
+        </tr>`).join("");
+    }
+    function missingInput(cid, attr) {
+      const el = missingTableBody.querySelector(`[data-${attr}="${cssEscape(cid)}"]`);
+      return el ? el.value : "";
+    }
+    missingTableBody.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".add-btn");
+      if (!btn) return;
+      const cid = btn.getAttribute("data-add-cid");
+      const name = (missingInput(cid, "missing-name") || "").trim();
+      const price = Math.max(0, Math.floor(Number(missingInput(cid, "missing-price") || 0)));
+      if (!name) { alert("请先填写物品名称"); return; }
+      btn.disabled = true; btn.textContent = "加入中...";
+      try {
+        const r = await fetch("/api/item-add", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cid, name, price }) });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || "add failed");
+        missingStatus.textContent = `已加入「${name}」，正在自动重新统计...`;
+        await refreshReportWithPrices();
+        await loadMissing();
+        missingStatus.textContent = `已加入「${name}」并完成重新统计。`;
+      } catch (err) {
+        missingStatus.textContent = "加入失败：" + (err.message || err);
+        btn.disabled = false; btn.textContent = "加入列表";
+      }
+    });
+    addedTableBody.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".del-btn");
+      if (!btn) return;
+      const cid = btn.getAttribute("data-del-cid");
+      if (!confirm(`确认删除该拍品（CID ${cid}）？删除后若日志仍有此物品，将重新变为未收录。`)) return;
+      btn.disabled = true; btn.textContent = "删除中...";
+      try {
+        const r = await fetch("/api/item-delete", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cid }) });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || "delete failed");
+        missingStatus.textContent = "已删除，正在重新统计...";
+        await refreshReportWithPrices();
+        await loadMissing();
+        missingStatus.textContent = "已删除并重新统计完成。";
+      } catch (err) {
+        missingStatus.textContent = "删除失败：" + (err.message || err);
+        btn.disabled = false; btn.textContent = "删除";
+      }
+    });
+    document.getElementById("scanMissingBtn").addEventListener("click", () => loadMissing(false));
+    // 每 5 分钟自动增量扫描一次缺失拍品（不打扰正在填写的输入）
+    setInterval(() => loadMissing(true), 5 * 60 * 1000);
+
+    // ===== 自动轮询：解析完成后自动填充缺失拍品 =====
+    let autoMissingTimer = null;
+    async function pollAutoMissing() {
+      try {
+        const resp = await fetch("/api/missing-items/auto", { cache: "no-store" });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.ready) {
+          // 有新的自动扫描结果 → 填入待收录表格
+          renderMissing(data.missing || []);
+          renderAdded(data.added || []);
+          const total = (data.missing || []).length;
+          const scanned = data.scanned_games || 0;
+          const skipped = data.skipped_games || 0;
+          if (total) {
+            missingStatus.textContent = `🔄 解析后自动扫描 ${fmt(scanned)} 场（跳过已扫描 ${fmt(skipped)} 场），发现 ${fmt(total)} 个新缺失拍品，填好名称与价格后点「加入列表」。`;
+          } else {
+            missingStatus.textContent = `🔄 解析后自动扫描 ${fmt(scanned)} 场（跳过已扫描 ${fmt(skipped)} 场），物品表已齐全 🎉`;
+          }
+        }
+      } catch (e) {
+        // 静默失败（服务器未就绪时忽略）
+      }
+    }
+    // 每 3 秒轮询一次自动扫描结果（页面可见时）
+    autoMissingTimer = window.setInterval(pollAutoMissing, 3000);
+    // 页面不可见时暂停轮询，省电省带宽
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        if (autoMissingTimer) { window.clearInterval(autoMissingTimer); autoMissingTimer = null; }
+      } else {
+        if (!autoMissingTimer) { autoMissingTimer = window.setInterval(pollAutoMissing, 3000); pollAutoMissing(); }
+      }
+    });
+
+    initCareerData();
+    loadDbStatusOnly();
+  </script>
+</body>
+</html>
