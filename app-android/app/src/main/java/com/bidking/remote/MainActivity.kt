@@ -52,6 +52,77 @@ class MainActivity : AppCompatActivity() {
     // 当前连接的服务器显示名（通知里标明消息来自哪台解析工具，2026-08-30）
     private fun activeTabName(): String = tabs.find { it.url == activeUrl }?.name ?: ""
 
+    /* ================= 令牌：按服务器隔离 + 加密持久化（2026-08-31 P1）=================
+       目标：① 切后台 / 进程被回收后回来不用重新登录；② 多服务器各自持有令牌互不覆盖。
+       存储：与服务器密码同级，写进 EncryptedSharedPreferences（initEncryptedPrefs）。
+       ⚠️ 生命周期：令牌是 exe 的进程内存态，exe 一重启就全部失效（网6），所以持久化
+       只用于「先拿旧令牌轻轻探一次，401 再重新登录」，绝不假定它一定有效。 */
+    private fun tokenKeyOf(server: String): String {
+        // 去掉协议头、把 : 和 . 换成安全字符，避开特殊字符进 key（参照 devKeyOf 的思路）
+        val n = normalizeServerUrl(server)
+        return "tok_" + n.removePrefix("http://").removePrefix("https://")
+            .replace(":", "_").replace(".", "-")
+    }
+    private fun tokenFor(url: String): String = tokenMap[normalizeServerUrl(url)] ?: ""
+
+    private fun setToken(url: String, tk: String, scope: String = "", paired: Boolean = false) {
+        val k = normalizeServerUrl(url)
+        if (tk.isEmpty()) {
+            tokenMap.remove(k); tokenScope.remove(k); tokenPaired.remove(k)
+            try { prefs.edit().remove(tokenKeyOf(k)).apply() } catch (_: Exception) {}
+            return
+        }
+        tokenMap[k] = tk
+        if (scope.isNotEmpty()) tokenScope[k] = scope
+        // 已配对状态只增不减：后续用密码续期拿不到 paired 标记时不要把它抹掉
+        tokenPaired[k] = paired || (tokenPaired[k] == true)
+        try {
+            prefs.edit().putString(tokenKeyOf(k), JSONObject()
+                .put("t", tk)
+                .put("scope", tokenScope[k] ?: "")
+                .put("paired", tokenPaired[k] == true)
+                .put("ts", System.currentTimeMillis()).toString()).apply()
+        } catch (_: Exception) {}
+        writeTokenCookie(k, tk)     // 令牌与 WebView Cookie 永远同步（Cookie 按 origin 天然隔离）
+    }
+
+    /** 把令牌写进 WebView Cookie：页面发出的第一个请求就带令牌，消灭「页面先请求、
+     *  令牌后注入」的 401 竞态（安1）。Cookie 是应用级存储，WebView 被 LRU 销毁 /
+     *  进程重启后依然在，所以这里是幂等的补写。 */
+    private fun writeTokenCookie(url: String, tk: String) {
+        val k = normalizeServerUrl(url)
+        if (k.isEmpty() || tk.isEmpty()) return
+        try {
+            val cm = android.webkit.CookieManager.getInstance()
+            cm.setAcceptCookie(true)
+            cm.setCookie(k, "bk_token=$tk; Path=/")
+            cm.flush()
+        } catch (_: Exception) {}
+    }
+
+    /** 冷启动：把落盘的令牌读回内存并补写 Cookie（onCreate 里 loadTabs() 之后调用） */
+    private fun loadTokens() {
+        tabs.forEach { t ->
+            val k = normalizeServerUrl(t.url)
+            val raw = try { prefs.getString(tokenKeyOf(k), "") ?: "" } catch (_: Exception) { "" }
+            if (raw.isEmpty()) return@forEach
+            val o = try { JSONObject(raw) } catch (_: Exception) { return@forEach }
+            val tk = o.optString("t", "")
+            if (tk.isEmpty()) return@forEach
+            tokenMap[k] = tk
+            tokenScope[k] = o.optString("scope", "")
+            tokenPaired[k] = o.optBoolean("paired", false)
+            writeTokenCookie(k, tk)
+        }
+    }
+
+    private fun scopeSuffix(url: String): String {
+        val k = normalizeServerUrl(url)
+        return if (tokenScope[k] == "legacy-readonly") " · 只读（公网未配对）"
+               else if (tokenPaired[k] == true) " · 已配对"
+               else ""
+    }
+
     private lateinit var prefs: SharedPreferences
     private val tabs = mutableListOf<ServerTab>()
     // WebView 池：accessOrder=true，超过上限时淘汰最久未访问的（内存优化 P1）
@@ -68,9 +139,19 @@ class MainActivity : AppCompatActivity() {
     }
     private val MAX_WEBVIEWS = 4
     private var currentWv: WebView? = null   // 当前正在显示的 WebView，LRU 淘汰时保护它
+    // P2：电脑端重新解析过、但当时没在看的服务器。切回去时才刷新，
+    // 避免给后台页面做无谓的整页重载（用户看不到，还丢滚动位置）。
+    private val dirtyServers = mutableSetOf<String>()
 
     @Volatile private var activeUrl = ""
-    @Volatile private var authToken = ""
+    /* 令牌按服务器隔离后的只读视图（2026-08-31 P1）：
+       全文十几处「读令牌」的地方一行都不用改，写入一律改走 setToken(url, token)。
+       原来是单个内存变量 authToken —— 进程被系统回收后必丢（切后台回来只能重新登录），
+       而且多服务器共用一个变量，切 tab 会互相覆盖（安16）。 */
+    private val authToken: String get() = tokenFor(activeUrl)
+    private val tokenMap = java.util.concurrent.ConcurrentHashMap<String, String>()      // 归一URL -> 令牌
+    private val tokenScope = java.util.concurrent.ConcurrentHashMap<String, String>()    // 归一URL -> scope
+    private val tokenPaired = java.util.concurrent.ConcurrentHashMap<String, Boolean>()  // 归一URL -> 是否已配对
     private var passEnabled = false
     @Volatile private var isConnecting = false   // 防重入：避免 onCreate/onResume/网络回调并发重复连接
     private val notifying = AtomicBoolean(false)
@@ -79,6 +160,34 @@ class MainActivity : AppCompatActivity() {
     private var lastSyncState = ""            // 上次 /api/status 的 state 摘要
     private var lastBackPressed = 0L          // 上次按返回键时间（I1：再按一次退出防误关）
     private var netCallback: android.net.ConnectivityManager.NetworkCallback? = null  // 网络变化监听（C2 自动重连）
+
+    /* ================= 状态栏分层（2026-08-31 P0）=================
+       背景（安15）：启动估价器的看门狗曾把状态栏永久占成「启动中：idle」——
+       checkLaunchStatus 在令牌为空 / JSON 解析失败时直接 return@Thread，既不停表
+       也不复位文字，于是「已连接 / 连接失败：xxx」全被盖住，用户以为连不上，
+       只能彻底退出 App 才恢复。
+       修法：连接层与启动层分开存，启动层带 90 秒 TTL 自动作废（最后一道保险），
+       两层同时有内容时拼接显示。所有状态写入一律走这两个 setter，
+       不再直接写 statusView.text。 */
+    @Volatile private var connStatusText = ""     // 连接层：已连接 / 连接失败：xxx / 正在恢复连接…
+    @Volatile private var launchStatusText = ""   // 启动层：启动中：launching · 正在确认卡密
+    private var launchStatusAt = 0L               // 启动层最后更新时间（TTL 兜底用）
+
+    private fun setConnStatus(s: String) { connStatusText = s; renderStatus() }
+    private fun setLaunchStatus(s: String) { launchStatusText = s; launchStatusAt = System.currentTimeMillis(); renderStatus() }
+    /** 启动层收工：传 "" 表示把状态栏完整交还连接层 */
+    private fun clearLaunchStatus() { launchStatusText = ""; renderStatus() }
+    private fun renderStatus() {
+        // 启动层超过 90 秒没更新就自动作废：哪怕某条代码路径漏了收工，也能自己恢复
+        if (launchStatusText.isNotEmpty() && System.currentTimeMillis() - launchStatusAt > 90_000L) launchStatusText = ""
+        val txt = when {
+            launchStatusText.isEmpty() -> connStatusText
+            connStatusText.isEmpty() -> launchStatusText
+            else -> "$connStatusText ｜ $launchStatusText"
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) statusView.text = txt
+        else runOnUiThread { statusView.text = txt }
+    }
 
     // UI
     private lateinit var bottomBar: LinearLayout          // 底部导航（含功能条 + 服务器 tab）
@@ -123,30 +232,41 @@ class MainActivity : AppCompatActivity() {
         prefs = initEncryptedPrefs()
         createNotificationChannel()
         loadTabs()
+        loadTokens()     // P1：把上次登录的令牌从加密存储读回内存（按服务器各自独立）
         buildUi()
         loadDarkModePref()   // 读取并应用全局深色（含 WebView 注入）
         loadProfitPref()     // 读取并应用盈亏配色（红盈绿亏 / 绿盈红亏）
         if (tabs.isNotEmpty()) {
             activeUrl = tabs.first().url
-            connect(activeUrl, tabs.first().pwd)
+            // P1：冷启动优先用落盘令牌轻探（/api/status 200 即免登录），
+            // 令牌失效（如电脑端 exe 重启过）才回退完整登录。旧实现无条件
+            // connect() —— 强杀/被系统回收后重开必走一整轮密码登录。
+            resumeOrLogin(activeUrl, tabs.first().pwd)
         } else {
-            statusView.text = "点击下方「＋」添加第一个解析工具地址"
+            setConnStatus("点击下方「＋」添加第一个解析工具地址")
         }
         setupNetworkMonitor()   // 监听网络变化，断网恢复自动重连（C2）
         // 电池优化引导（N2）：延迟弹出，避免打断初始加载
         window.decorView.postDelayed({ maybeRequestBatteryOptim() }, 2000)
     }
 
-    // 冷启动/从后台返回时 authToken 可能已丢失（token 未持久化），若当前有服务器则自动重连
+    /** 从后台返回 / 冷启动：原则是「默认什么都不做」。
+     *  2026-08-31 P1：令牌已按服务器加密落盘，只有三种情况才需要网络动作：
+     *    ① 这台服务器没有令牌（首次 / 令牌被清）→ 用落盘令牌轻探，不行再完整登录；
+     *    ② 页面被 LRU 淘汰了（要重建 WebView）→ 同上；
+     *    ③ 其余（最常见）→ 只做一次后台静默探测，200 就连状态栏都不改。
+     *  轮询线程无论哪种情况都要确保还活着（后台可能被系统停掉）。 */
     override fun onResume() {
         super.onResume()
-        if (authToken.isEmpty() && activeUrl.isNotEmpty()) {
-            connect(activeUrl, activeTabPwd())
-        } else if (authToken.isNotEmpty() && activeUrl.isNotEmpty()) {
-            // 从后台返回后轮询可能已停，重新拉起
-            if (!autoSyncRunning) startAutoSyncMonitor()
-            if (!lowStockRunning) startLowStockMonitor()
+        if (activeUrl.isEmpty()) return
+        val key = normalizeServerUrl(activeUrl)
+        when {
+            tokenFor(activeUrl).isEmpty() -> resumeOrLogin(activeUrl, activeTabPwd())
+            !webViews.containsKey(key)    -> resumeOrLogin(activeUrl, activeTabPwd())
+            else                          -> silentProbe(activeUrl)
         }
+        if (!autoSyncRunning) startAutoSyncMonitor()
+        if (!lowStockRunning) startLowStockMonitor()
     }
 
     /* ================= 界面（exe 报表风格：米色纸感 #F4F1EA + 墨绿 #1F7667 + 暖橙 #A55B2A） ================= */
@@ -188,7 +308,7 @@ class MainActivity : AppCompatActivity() {
                 if (isConnecting) { toast("正在连接中，请稍候"); return@setOnClickListener }
                 if (activeUrl.isEmpty()) { toast("还没有可连接的服务器"); return@setOnClickListener }
                 toast("正在重新连接…")
-                authToken = ""
+                setToken(activeUrl, "")     // 手动重连：主动丢弃旧令牌，走完整登录
                 connect(activeUrl, activeTabPwd())
             }
         }
@@ -520,7 +640,7 @@ class MainActivity : AppCompatActivity() {
         hideSheet()
         if (activeUrl.isEmpty()) {
             webHost.removeAllViews()
-            statusView.text = "没有服务器了，点击「＋」添加"
+            setConnStatus("没有服务器了，点击「＋」添加")
         } else {
             connect(activeUrl, activeTabPwd())
         }
@@ -615,8 +735,20 @@ class MainActivity : AppCompatActivity() {
                     }
                     activeUrl = tab.url
                     renderBottomBar()
-                    // 每次切换服务器都重新连接获取该服务器的 token，避免轮询时拿旧 token 打新地址导致 401
-                    connect(tab.url, tab.pwd)
+                    // P2 秒切：这台服务器的页面和令牌都还在 → 先把旧页面贴回来（零网络等待），
+                    // 校验挪到后台；只有首次 / 页面被 LRU 淘汰时才走完整登录。
+                    // 旧实现无条件 connect()，切一次就要等一整轮登录（用户体感"卡一下"）。
+                    val key = normalizeServerUrl(tab.url)
+                    val cached = webViews[key]
+                    if (cached != null && tokenFor(key).isNotEmpty()) {
+                        showOrCreateWebView(key)
+                        setConnStatus("已连接" + scopeSuffix(key))
+                        // 期间电脑端重新解析过 → 补一次刷新（软刷新优先，见 softRefresh）
+                        if (dirtyServers.remove(key)) softRefresh(cached)
+                        silentProbe(key)        // 后台校验：200 完全不动 UI，401 才补登录
+                    } else {
+                        connect(key, tab.pwd)
+                    }
                 }
                 setOnLongClickListener { showConfSheet(tab); true }
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -648,6 +780,82 @@ class MainActivity : AppCompatActivity() {
         toast("已添加「$name」")
     }
 
+    /* ================= 轻量续连（2026-08-31 P1）=================
+       令牌已经按服务器加密落盘，所以切后台 / 进程被回收回来时，绝大多数情况下
+       不必再走一遍完整的密码登录或设备配对挑战-响应 —— 先拿旧令牌探一次就行。*/
+
+    /** 先拿落盘令牌探一次 /api/status：有效就直接用，无效再走完整登录。
+     *  ⚠️ 为什么用 /api/status 而不是 /api/server-info：server-info 在服务端的 GET
+     *  免鉴权白名单里（serve.py:2388），不带令牌也返回 200，拿它校验等于没校验；
+     *  /api/status 走令牌拦截器（serve.py:2404），响应体只有三个字段，最便宜。 */
+    private fun resumeOrLogin(url: String, pwd: String) {
+        val key = normalizeServerUrl(url)
+        val tk = tokenFor(key)
+        if (tk.isEmpty()) { connect(url, pwd); return }
+        if (isConnecting) return          // 已有连接在跑，别插队
+        setConnStatus("正在恢复连接…")
+        thread {
+            val (code, _, _) = httpGetEx("$key/api/status", tk)
+            runOnUiThread {
+                when {
+                    code == 200 -> {
+                        writeTokenCookie(key, tk)
+                        setConnStatus("已连接" + scopeSuffix(key))
+                        showOrCreateWebView(key)
+                        startLowStockMonitor()
+                        startAutoSyncMonitor()
+                    }
+                    code == 401 || code == 403 -> {
+                        // 令牌过期（多半是电脑端的 exe 重启过，令牌是它的内存态）
+                        setConnStatus("连接已过期，正在重新登录…")
+                        setToken(key, "")
+                        connect(key, pwd)
+                    }
+                    else -> {
+                        // 网络不通：不清令牌（网络抖动 ≠ 令牌失效），有缓存页面就先看着
+                        setConnStatus("网络不稳，页面显示的是上次数据")
+                        if (webViews.containsKey(key)) showOrCreateWebView(key)
+                        else connect(key, pwd)
+                    }
+                }
+            }
+        }
+    }
+
+    /** 后台静默探测：令牌还有效就【什么 UI 都不动】，只有 401 才补一次登录。
+     *  用于「页面和令牌都还在」的切后台返回场景 —— 这是最常见的一条路径。 */
+    private fun silentProbe(url: String) {
+        val key = normalizeServerUrl(url)
+        val tk = tokenFor(key)
+        if (tk.isEmpty()) return
+        thread {
+            val (code, _, _) = httpGetEx("$key/api/status", tk)
+            if (code == 401 || code == 403) {
+                runOnUiThread {
+                    setConnStatus("连接已过期，正在重新登录…")
+                    setToken(key, "")
+                    connect(key, activeTabPwd())
+                }
+            }
+        }
+    }
+
+    /** 401 惰性自愈（2026-08-31 P1）：轮询类请求拿到 401 时自动重新登录。
+     *  解决「电脑端 exe 重启后令牌全部作废」—— 这时状态栏还写着「已连接」，
+     *  页面却 401 拿不到数据，用户会以为 App 坏了。同一服务器 60 秒内最多
+     *  重连一次，避免网络抖动或 exe 反复重启把登录请求刷爆。 */
+    private val lastReconnectAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private fun reconnectSilently(url: String) {
+        val key = normalizeServerUrl(url)
+        val now = System.currentTimeMillis()
+        if (now - (lastReconnectAt[key] ?: 0L) < 60_000L) return
+        lastReconnectAt[key] = now
+        setToken(key, "")
+        runOnUiThread { setConnStatus("连接已过期，正在重新登录…") }
+        val pwd = tabs.find { normalizeServerUrl(it.url) == key }?.pwd ?: ""
+        connect(key, pwd)
+    }
+
     /* ================= 连接 / 鉴权 ================= */
     // 2026-08-29：密码登录优先，不再一上来就要求配对。
     // 新 exe 规则：本机/局域网 = 密码对上即全权（scope=local-ui，无需配对）；
@@ -658,7 +866,7 @@ class MainActivity : AppCompatActivity() {
         val server = normalizeServerUrl(server0)   // 历史保存的地址可能带路径尾巴，统一清洗
         if (server.isEmpty()) return
         isConnecting = true
-        statusView.text = "正在连接…"
+        setConnStatus("正在连接…")
         thread {
             var ok = false
             var paired = false
@@ -677,10 +885,14 @@ class MainActivity : AppCompatActivity() {
                 val (code, body, errKind) = httpPostEx("$server/api/auth", JSONObject().put("pwd", pwd))
                 val json = body?.let { b -> runCatching { JSONObject(b) }.getOrNull() }
                 if (json != null && json.optBoolean("ok")) {
-                    authToken = json.optString("token", "")
+                    // P1：令牌按「本次连接的 server」存，不用 activeUrl ——
+                    // 快速切 tab 时 activeUrl 可能已经指向另一台，会把令牌存错地方
+                    val tk = json.optString("token", "")
+                    val sc = json.optString("scope", "")
+                    setToken(server, tk, sc)
                     passEnabled = json.optBoolean("pass_enabled", false)
-                    ok = authToken.isNotEmpty()
-                    readonly = json.optString("scope", "") == "legacy-readonly"
+                    ok = tk.isNotEmpty()
+                    readonly = sc == "legacy-readonly"
                 } else if (json != null && code == 403 && json.optString("error", "").contains("尚未配对")) {
                     // 电脑端要求先配对（公网+旧版只读被关）：直接走配对流程，不判失败
                     needPair = true
@@ -714,14 +926,14 @@ class MainActivity : AppCompatActivity() {
                     if (k.isNotEmpty()) saveDeviceKey(server, k)
                     val tk = auto.optString("token", "")
                     if (tk.isNotEmpty()) {
-                        authToken = tk
+                        setToken(server, tk, "", paired = true)
                         paired = true; readonly = false; ok = true
                     } else if (deviceLogin(server)) {
                         paired = true; readonly = false; ok = true
                     } else if (needPair) { ok = false; errMsg = "重新绑定成功但登录失败，请重试" }
                 } else if (rid != null) {
                     runOnUiThread {
-                        statusView.text = "等待电脑端同意配对…"
+                        setConnStatus("等待电脑端同意配对…")
                         showWebHostHint("🔐 等待电脑端同意\n\n这是通过公网(ngrok)访问，需要在电脑上批准：\n电脑报表页 →「🚀 远程启动电脑程序」弹窗 →「安全与配对」→ 点「同意」\n\n（同意后本窗口自动继续）\n\n若你在同一 Wi-Fi，请改用电脑网页顶部显示的局域网地址，无需配对即可连接")
                     }
                     val (k, waitErr) = pollPairKey(server, rid)
@@ -752,40 +964,36 @@ class MainActivity : AppCompatActivity() {
                 // 令牌写入 WebView Cookie（2026-08-30）：页面发出的第一个请求就带令牌，
                 // 消灭"页面先请求、令牌后注入"的 401 竞态（局域网+已设密码时
                 // 生涯/道具/价格库会全没数据）。
-                try {
-                    val cm = android.webkit.CookieManager.getInstance()
-                    cm.setAcceptCookie(true)
-                    cm.setCookie(server, "bk_token=" + authToken + "; Path=/")
-                    cm.flush()
-                } catch (e: Exception) { }
+                // P1：setToken() 内部已同步写 Cookie，这里再补一次确保与当前 server 一致
+                writeTokenCookie(server, tokenFor(server))
                 runOnUiThread {
                     // 状态栏不回显服务器地址（2026-08-30）：截图外发时不暴露所连域名
-                    statusView.text = "已连接" + when {
+                    setConnStatus("已连接" + when {
                         paired -> " · 已配对"
                         readonly -> " · 只读（公网未配对）"
                         else -> ""
-                    }
+                    })
                     showOrCreateWebView(server)
                     startLowStockMonitor()   // 连接成功即开始库存轮询
                     startAutoSyncMonitor()   // 连接成功即开始自动同步检测（exe 刷新后 App 同步）
                     if (readonly) toast("公网访问为只读；在电脑端配对后可远程启动估价器")
                 }
             } else {
-                authToken = ""
+                setToken(server, "")
                 runOnUiThread {
                     if (errMsg.isEmpty()) {
                         errMsg = "连不上电脑：确认电脑上解析器正在运行、地址正确、防火墙放行 8766"
                     }
-                    statusView.text = "连接失败：$errMsg"
+                    setConnStatus("连接失败：$errMsg")
                     showWebHostHint("⚠️ 连接失败\n\n$errMsg\n\n检查清单：\n• 电脑上 BidKing解析器.exe 是否在运行\n• 地址是否正确（电脑网页顶部会显示「另一台电脑访问」的局域网地址）\n• 手机和电脑是否在同一 Wi-Fi；Windows 防火墙是否放行 8766\n• 密码是否与电脑端设置的一致\n\n点底部服务器名可重新连接")
                     toast("无法获取凭证，请检查地址与密码")
                 }
             }
             } catch (e: Exception) {
-                authToken = ""
+                setToken(server, "")
                 val msg = e.message ?: "未知错误"
                 runOnUiThread {
-                    statusView.text = "连接异常"
+                    setConnStatus("连接异常")
                     showWebHostHint("⚠️ 连接异常\n\n$msg\n\n点底部服务器名可重新连接")
                 }
             } finally {
@@ -837,7 +1045,11 @@ class MainActivity : AppCompatActivity() {
 
     /* ================= WebView（?app=1 裁剪） ================= */
     private fun showOrCreateWebView(url: String) {
-        val wv = webViews.getOrPut(url) {
+        // P2：池的 key 必须归一。connect() 传进来的是 normalize 后的 server，
+        // 而 tab.url 可能带尾巴（/api、结尾 /），不归一就会给同一台服务器建出两个
+        // WebView，白占一个 LRU 名额，还会让「切回来」变成「重新加载」。
+        val key = normalizeServerUrl(url)
+        val wv = webViews.getOrPut(key) {
             WebView(this).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
@@ -880,7 +1092,13 @@ class MainActivity : AppCompatActivity() {
                         // 道具页显示「无法连接价格数据库」。onPageStarted 阶段页面脚本
                         // 尚未执行，包装器先落地；包装器只是包一层 window.fetch/XHR，幂等，
                         // onPageFinished 的兜底注入再包一层也无害（头重复设置无副作用）。
-                        injectTokenIntoPage(view)
+                        // P1：传本页 URL，按它取令牌（不能用 activeUrl，多服务器会串号）
+                        injectTokenIntoPage(view, url)
+                        // P3：主报表页本地缓存层必须排在令牌包装器【之后】注入，
+                        // 它捕获的 origFetch 才已带令牌头（安17）；只在报表页注入
+                        if (url != null && url.contains("bidking_report.html")) {
+                            injectReportCacheLayer(view)
+                        }
                     }
                     override fun onPageFinished(view: WebView?, pageUrl: String?) {
                         super.onPageFinished(view, pageUrl)
@@ -888,8 +1106,14 @@ class MainActivity : AppCompatActivity() {
                         updateFuncBarVisibility(!(pu.contains("bidking_career.html") || pu.contains("bidking_item_prices.html")))
                         injectGlobalTheme(view)
                         injectTouchFeel(view)
-                        injectTokenIntoPage(view)
+                        injectTokenIntoPage(view, pageUrl)
                         injectEnhancements(view, pageUrl)
+                        // P3 兜底：onPageStarted 注入万一丢失，这里补一次缓存层
+                        // （同文档幂等守卫，重复注入无副作用；迟到时首个请求已走网络，
+                        //  但 __bkSoftRefresh / 缓存写库仍生效）
+                        if (pageUrl != null && pageUrl.contains("bidking_report.html")) {
+                            injectReportCacheLayer(view)
+                        }
                         // E1：生涯页数据经 fetch 后异步渲染，延迟补注入一次，
                         // 确保 data-label/拿仓背景/三合一切换等生效（页面 DOM 就绪兜底）
                         view?.postDelayed({
@@ -903,7 +1127,7 @@ class MainActivity : AppCompatActivity() {
                         super.onReceivedError(view, errorCode, description, failingUrl)
                         // 加载失败不白屏：显示错误信息
                         runOnUiThread {
-                            statusView.text = "页面加载失败：$description"
+                            setConnStatus("页面加载失败：$description")
                             showWebHostHint("⚠️ 报表加载失败\n\n$description\n\n检查：\n• 电脑工具是否运行\n• 地址/密码是否正确\n• 点底部服务器名重试")
                         }
                     }
@@ -926,25 +1150,190 @@ class MainActivity : AppCompatActivity() {
             FrameLayout.LayoutParams.MATCH_PARENT, dp(4), Gravity.TOP))
         webProgress.z = 10f
         // 重新显示缓存的 WebView 时恢复主题/token/增强脚本（切 tab 回来不变回 exe 样式）
+        // P1：令牌按这张 WebView 自己的 URL 注入（切 tab 秒显时页面还属于旧服务器）
         injectGlobalTheme(wv)
         injectTouchFeel(wv)
-        injectTokenIntoPage(wv)
+        injectTokenIntoPage(wv, wv.url ?: key)
         wv.url?.let { injectEnhancements(wv, it) }
         // 首次创建并在挂载窗口后再 loadUrl，确保 onPageFinished/evaluateJavascript 稳定生效
         if (wv.tag == null) {
             wv.tag = true
+            // P2：LRU 淘汰后重建的 WebView，页面 DOM 状态丢了，但令牌 Cookie 是应用级
+            // 存储、还在。这里无条件补写一次（幂等、零成本），确保首请求就带令牌。
+            writeTokenCookie(key, tokenFor(key))
             // 主帧导航带 ngrok 跳过头，防免费版警告页（WebView UA 是浏览器形态）
-            wv.loadUrl("$url/bidking_report.html?app=1",
+            wv.loadUrl("$key/bidking_report.html?app=1",
                 mapOf("ngrok-skip-browser-warning" to "1"))
         }
     }
 
-    private fun injectTokenIntoPage(wv: WebView?) {
+    /** 软刷新：优先让页面自己重新拉数据（保住滚动位置和已渲染的内容），
+     *  页面还没注入刷新接口时回落到整页 reload。
+     *  P3 会把页面侧的 window.__bkSoftRefresh 接上；这里先保证调用点可用。 */
+    private fun softRefresh(wv: WebView) {
+        wv.evaluateJavascript(
+            "(function(){try{if(window.__bkSoftRefresh){window.__bkSoftRefresh();return '1';}}catch(e){}return '0';})()"
+        ) { r -> if ((r ?: "").trim('"') != "1") wv.reload() }
+    }
+
+    /** P3：主报表页本地缓存层（App 端注入，不动 exe 内嵌网页）。
+     *  - IndexedDB 按服务器 origin 天然隔离（多服务器各自独立缓存）；
+     *  - 首个 result.json 请求先投喂缓存（秒开、零网络），后台再用 ETag 对账：
+     *    result.json 是「每次解析整体重写的会话快照」，不是只增库，所以
+     *    不用 since_ts，只用 ETag（serve.py 静态文件 mtime-size）判「有没有变」；
+     *  - 对账一致 → 什么都不做（滚动位置纹丝不动）；有变 → softRender 重渲染
+     *    并恢复 window.scrollY + .table-wrap 滚动位置；
+     *  - 自愈（用户选择不加手动清缓存入口）：缓存先过页面自己的 validateReport
+     *    校验，不过就丢弃走网络；整层 try/catch 降级；连续 3 次渲染异常
+     *    自动置 __bkReportCacheOff 关闭缓存层（本次文档内生效）。
+     *  ⚠️ 安17：必须排在 injectTokenIntoPage 之后注入（见 onPageStarted 调用点），
+     *  这里的 origFetch 已带 X-Auth-Token 与 ngrok 跳过头。
+     *  本段 JS 入库前曾以独立 .js 文件过 node --check（语法零错），改这里时
+     *  建议先复制出去再过一遍语法检查（改 html/注入 JS 必过 JS 语法检查——页1）。 */
+    private fun injectReportCacheLayer(wv: WebView?) {
+        val js = """(function () {
+  if (window.__bkReportCacheReady || window.__bkReportCacheOff) return;
+  window.__bkReportCacheReady = true;
+  var origFetch = window.fetch;
+  var DB = "bidking_report", ST = "kv", KEY = "report_cache";
+  var cache = null, served = false, renderFails = 0;
+
+  function idbOpen() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(DB, 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore(ST); };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function idbGet(key) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var rq = db.transaction(ST, "readonly").objectStore(ST).get(key);
+        rq.onsuccess = function () { resolve(rq.result); };
+        rq.onerror = function () { reject(rq.error); };
+      }).then(function (v) { db.close(); return v; }, function (e) { db.close(); throw e; });
+    });
+  }
+  function idbSet(key, val) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(ST, "readwrite");
+        tx.objectStore(ST).put(val, key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      }).then(function (v) { db.close(); return v; }, function (e) { db.close(); throw e; });
+    });
+  }
+
+  function cacheReady() {
+    return idbGet(KEY).then(function (c) {
+      if (c && typeof c.text === "string" && typeof c.etag === "string") cache = c;
+    }).catch(function () {});
+  }
+  var readyP = cacheReady();
+
+  function validCache() {
+    try { return !!(cache && cache.text && window.validateReport(JSON.parse(cache.text))); }
+    catch (e) { return false; }
+  }
+  function isResultJson(u) { var i = u.indexOf("result.json"); return i >= 0 && (i + 11 === u.length || u.charAt(i + 11) === "?"); }
+  function note(msg) { try { window.showStatus(msg); } catch (e) {} }
+  function saveCache(etag, text) {
+    cache = { etag: etag || "", text: text, savedAt: Date.now() };
+    idbSet(KEY, cache).catch(function () {});
+  }
+
+  window.fetch = function (input, init) {
+    try {
+      var u = String((input && input.url) || input || "");
+      if (isResultJson(u) && !(init && init.__bkBypass)) {
+        if (!served) {
+          served = true;
+          var args = arguments, self = this;
+          setTimeout(bkReconcile, 0);
+          return readyP.catch(function () {}).then(function () {
+            if (window.__bkReportCacheOff || !validCache()) return origFetch.apply(self, args);
+            var mins = cache.savedAt ? Math.max(1, Math.round((Date.now() - cache.savedAt) / 60000)) : null;
+            note(mins != null ? ("显示的是缓存数据（约 " + mins + " 分钟前），正在检查更新…") : "正在检查更新…");
+            return new Response(cache.text, {
+              status: 200,
+              headers: { "Content-Type": "application/json" }
+            });
+          });
+        }
+        var p = origFetch.apply(this, arguments);
+        return p.then(function (r) {
+          if (r && r.ok) {
+            try {
+              r.clone().text().then(function (t) { saveCache(r.headers.get("ETag") || "", t); }).catch(function () {});
+            } catch (e) {}
+          }
+          return r;
+        });
+      }
+    } catch (e) {}
+    return origFetch.apply(this, arguments);
+  };
+
+  async function bkReconcile() {
+    try {
+      var r = await origFetch("result.json", { __bkBypass: true });
+      if (r.status === 401 || r.status === 403) { note("当前没有访问权限，显示的是缓存数据"); return; }
+      if (!r.ok) { note("暂时连不上电脑，显示的是缓存数据"); return; }
+      var etag = r.headers.get("ETag") || "";
+      var text = await r.text();
+      if (cache && etag && etag === cache.etag) { note("已是最新"); return; }
+      if (cache && !etag && text === cache.text) { note("已是最新"); return; }
+      var data;
+      try { data = window.validateReport(JSON.parse(text)); }
+      catch (e) { note("新数据校验失败，暂时保留缓存显示"); return; }
+      saveCache(etag, text);
+      softRender(data);
+      note("已更新到最新");
+    } catch (e) { note("暂时连不上电脑，显示的是缓存数据"); }
+  }
+
+  function softRender(data) {
+    try {
+      var y = window.scrollY;
+      var wraps = [];
+      document.querySelectorAll(".table-wrap").forEach(function (el) {
+        wraps.push([el, el.scrollTop, el.scrollLeft]);
+      });
+      report = data;
+      window.__hasGames = !!(data && data.games && data.games.length);
+      try {
+        if (typeof getSelectedUid === "function" && !getSelectedUid() && data.meta && data.meta.uid) setSelectedUid(data.meta.uid);
+      } catch (e) {}
+      window.render("result.json");
+      requestAnimationFrame(function () {
+        window.scrollTo(0, y);
+        wraps.forEach(function (p) { p[0].scrollTop = p[1]; p[0].scrollLeft = p[2]; });
+      });
+    } catch (e) {
+      if (++renderFails >= 3) window.__bkReportCacheOff = 1;
+    }
+  }
+
+  window.__bkSoftRefresh = function () {
+    try { bkReconcile(); return true; } catch (e) { return false; }
+  };
+})();"""
+        wv?.evaluateJavascript(js, null)
+    }
+
+    /** 注入 fetch/XHR 包装器：ngrok 跳过头 + 令牌。
+     *  ⚠️ 安16（P1）：必须按【这个 WebView 自己的 URL】取令牌，不能用 authToken
+     *  （authToken = 当前 activeUrl 的令牌）。多服务器各自持有 WebView，切 tab 后
+     *  若给旧页面注入新服务器的令牌，那个页面的请求会全部 401、数据全空。 */
+    private fun injectTokenIntoPage(wv: WebView?, viewUrl: String? = null) {
         // ngrok 免费版会对"浏览器 UA"的请求插警告页，页面内 fetch/XHR 也要带跳过头
         // （令牌可能还没拿到，所以这层包装与令牌解耦，始终注入）
-        val safeToken = authToken.replace("\\", "\\\\").replace("'", "\\'")
-        val tokenPart = if (authToken.isNotEmpty()) "opt.headers['X-Auth-Token']='$safeToken';" else ""
-        val tokenXhr = if (authToken.isNotEmpty()) "try{this.setRequestHeader('X-Auth-Token','$safeToken');}catch(e){}" else ""
+        val tk = tokenFor(viewUrl ?: wv?.url ?: activeUrl)
+        val safeToken = tk.replace("\\", "\\\\").replace("'", "\\'")
+        val tokenPart = if (tk.isNotEmpty()) "opt.headers['X-Auth-Token']='$safeToken';" else ""
+        val tokenXhr = if (tk.isNotEmpty()) "try{this.setRequestHeader('X-Auth-Token','$safeToken');}catch(e){}" else ""
         val js = "(function(){" +
                 "const H={'ngrok-skip-browser-warning':'1'};" +
                 "const o=window.fetch;window.fetch=function(u,opt){opt=opt||{};opt.headers=opt.headers||{};opt.headers['ngrok-skip-browser-warning']='1';$tokenPart return o(u,opt);};" +
@@ -1942,32 +2331,40 @@ class MainActivity : AppCompatActivity() {
             while (autoSyncRunning) {
                 try {
                     if (activeUrl.isNotEmpty() && authToken.isNotEmpty()) {
-                        val resp = httpGet("$activeUrl/api/status", authToken)
-                        val json = try { JSONObject(resp ?: "") } catch (_: Exception) { null }
-                        val state = json?.optString("status") ?: ""
-                        val code = json?.optInt("code") ?: 0
-                        val msg = json?.optString("msg") ?: ""
-                        // 完整签名：state|code|msg（msg 含本次新增/跳过局数，连刷内容不同也能识别）
-                        val sig = "$state|$code|$msg"
-                        val prevState = if (lastSyncState.isEmpty()) "" else lastSyncState.substringBefore("|")
-                        val prevDoneMsg = if (prevState == "done") lastSyncState.substringAfterLast("|") else ""
-                        // 完成一次解析：① 由非 done 转 done（idle/running→done），或 ② 同态连刷但 msg 变化
-                        val fresh = state == "done" && (prevState != "done" || msg != prevDoneMsg)
-                        if (fresh) {
-                            lastSyncState = sig
-                            runOnUiThread {
-                                // 重新加载当前打开的报表/生涯/道具页（显示最新 result.json）
-                                webViews.values.forEach { wv ->
-                                    val u = wv.url ?: ""
-                                    if (u.contains("bidking_report.html") || u.contains("bidking_career.html")
-                                        || u.contains("bidking_item_prices.html")) {
-                                        wv.reload()
+                        val (httpCode, resp, _) = httpGetEx("$activeUrl/api/status", authToken)
+                        if (httpCode == 401 || httpCode == 403) {
+                            // P1：令牌作废（多半是电脑端 exe 重启过，令牌是它的内存态）→ 自动重新登录
+                            reconnectSilently(activeUrl)
+                        } else {
+                            val json = try { JSONObject(resp ?: "") } catch (_: Exception) { null }
+                            val state = json?.optString("status") ?: ""
+                            val code = json?.optInt("code") ?: 0
+                            val msg = json?.optString("msg") ?: ""
+                            // 完整签名：state|code|msg（msg 含本次新增/跳过局数，连刷内容不同也能识别）
+                            val sig = "$state|$code|$msg"
+                            val prevState = if (lastSyncState.isEmpty()) "" else lastSyncState.substringBefore("|")
+                            val prevDoneMsg = if (prevState == "done") lastSyncState.substringAfterLast("|") else ""
+                            // 完成一次解析：① 由非 done 转 done（idle/running→done），或 ② 同态连刷但 msg 变化
+                            val fresh = state == "done" && (prevState != "done" || msg != prevDoneMsg)
+                            if (fresh) {
+                                lastSyncState = sig
+                                // P3：当前页软刷新（保滚动位置），后台页只打脏标记，
+                                // 切回来时再刷（P2 的 showOrCreateWebView 会消费 dirtyServers）
+                                val activeKey = normalizeServerUrl(activeUrl)
+                                runOnUiThread {
+                                    webViews.forEach { (key, wv) ->
+                                        val u = wv.url ?: ""
+                                        if (u.contains("bidking_report.html") || u.contains("bidking_career.html")
+                                            || u.contains("bidking_item_prices.html")) {
+                                            if (key == activeKey) softRefresh(wv)
+                                            else dirtyServers.add(key)
+                                        }
                                     }
                                 }
+                            } else {
+                                // 其它态（idle/running/error）也更新签名，避免下次 done 误判成「无变化」
+                                lastSyncState = sig
                             }
-                        } else {
-                            // 其它态（idle/running/error）也更新签名，避免下次 done 误判成「无变化」
-                            lastSyncState = sig
                         }
                     }
                 } catch (_: Exception) {}
@@ -1987,35 +2384,39 @@ class MainActivity : AppCompatActivity() {
             while (lowStockRunning) {
                 try {
                     if (activeUrl.isNotEmpty() && authToken.isNotEmpty()) {
-                        val resp = httpPost("$activeUrl/api/lowstock", JSONObject(), authToken)
-                        val json = try { JSONObject(resp ?: "") } catch (_: Exception) { null }
-                        val items = json?.optJSONArray("items")
-                        val nowLow = mutableListOf<Pair<String, String>>()  // (cid, name×count)
-                        if (items != null) {
-                            for (i in 0 until items.length()) {
-                                val it = items.getJSONObject(i)
-                                val cid = it.optString("cid")
-                                val name = it.optString("name")
-                                val count = it.optInt("count")
-                                nowLow.add(cid to "$name（${count}个）")
+                        val (httpCode, resp, _) = httpPostEx("$activeUrl/api/lowstock", JSONObject(), authToken)
+                        if (httpCode == 401 || httpCode == 403) {
+                            reconnectSilently(activeUrl)     // P1：令牌作废 → 自动重新登录
+                        } else {
+                            val json = try { JSONObject(resp ?: "") } catch (_: Exception) { null }
+                            val items = json?.optJSONArray("items")
+                            val nowLow = mutableListOf<Pair<String, String>>()  // (cid, name×count)
+                            if (items != null) {
+                                for (i in 0 until items.length()) {
+                                    val it = items.getJSONObject(i)
+                                    val cid = it.optString("cid")
+                                    val name = it.optString("name")
+                                    val count = it.optInt("count")
+                                    nowLow.add(cid to "$name（${count}个）")
+                                }
                             }
-                        }
-                        // 键前缀：按服务器隔离提醒状态（多服务器互不干扰）
-                        val prefix = activeUrl + "|"
-                        // 1) 补货重置：当前服务器已提醒但本次数量>low（不在低库存列表）的 cid，从已提醒集合移除
-                        //    （只清理当前服务器的记录，其他服务器的保持不动）
-                        val stillLow = nowLow.map { prefix + it.first }.toSet()
-                        notifiedCids.removeAll { it.startsWith(prefix) && it !in stillLow }
-                        // 2) 只提醒「新出现」的低库存道具（同道具同服务器不重复打扰）
-                        val fresh = nowLow.filter { prefix + it.first !in notifiedCids }
-                        if (fresh.isNotEmpty() && notifying.compareAndSet(false, true)) {
-                            try {
-                                fresh.forEach { (cid, text) -> notifyLowStock(cid, text) }
-                                val names = fresh.joinToString("、") { it.second }
-                                statusRun("低库存：$names")
-                                fresh.forEach { notifiedCids.add(prefix + it.first) }
-                            } finally {
-                                notifying.set(false)
+                            // 键前缀：按服务器隔离提醒状态（多服务器互不干扰）
+                            val prefix = activeUrl + "|"
+                            // 1) 补货重置：当前服务器已提醒但本次数量>low（不在低库存列表）的 cid，从已提醒集合移除
+                            //    （只清理当前服务器的记录，其他服务器的保持不动）
+                            val stillLow = nowLow.map { prefix + it.first }.toSet()
+                            notifiedCids.removeAll { it.startsWith(prefix) && it !in stillLow }
+                            // 2) 只提醒「新出现」的低库存道具（同道具同服务器不重复打扰）
+                            val fresh = nowLow.filter { prefix + it.first !in notifiedCids }
+                            if (fresh.isNotEmpty() && notifying.compareAndSet(false, true)) {
+                                try {
+                                    fresh.forEach { (cid, text) -> notifyLowStock(cid, text) }
+                                    val names = fresh.joinToString("、") { it.second }
+                                    statusRun("低库存：$names")
+                                    fresh.forEach { notifiedCids.add(prefix + it.first) }
+                                } finally {
+                                    notifying.set(false)
+                                }
                             }
                         }
                     }
@@ -2051,6 +2452,8 @@ class MainActivity : AppCompatActivity() {
     private var launchAttemptId = 0        // 每次点「启动估价器」自增：用于"同一次失败只提醒一次"
     private var lastNotifiedAttempt = -1
     private var launchNotifySeq = 1000     // 通知 id 自增：每次失败都是通知栏里独立的一条（不再互相覆盖）
+    private var launchProbeMiss = 0        // 2026-08-31 P0：连续拿不到启动状态的次数（≥3 收工，别无限空转）
+    private var launchIdleCount = 0        // 2026-08-31 P0：连续读到 idle 的次数（≥2 收工，不再空转 4 分钟）
 
     private fun launchEstimator() {
         if (activeUrl.isEmpty()) { toast("还没连接服务器"); return }
@@ -2075,7 +2478,7 @@ class MainActivity : AppCompatActivity() {
                     "error" -> toast("启动失败：" + (if (error.isNotEmpty()) error else "未知错误"))
                     else -> toast("状态：$state")
                 }
-                if (message.isNotEmpty()) statusView.text = "启动：$message"
+                if (message.isNotEmpty()) setLaunchStatus("启动：$message")
             }
         }.start()
     }
@@ -2085,6 +2488,8 @@ class MainActivity : AppCompatActivity() {
      *  App 要给足时间，否则正当程序还在确认弹窗时就被判成"启动失败"。 */
     private fun startLaunchWatchdog() {
         launchWatchdogRunning = true
+        launchProbeMiss = 0      // 每轮启动重置计数（P0）
+        launchIdleCount = 0
         launchWatchdog?.removeCallbacksAndMessages(null)
         launchWatchdog = Handler(Looper.getMainLooper())
         val poll = object : Runnable {
@@ -2094,26 +2499,59 @@ class MainActivity : AppCompatActivity() {
                 checkLaunchStatus(count >= 48)      // 48 × 5 秒 = 4 分钟
                 count++
                 if (count <= 48) launchWatchdog?.postDelayed(this, 5000)
-                else launchWatchdogRunning = false
+                else stopLaunchWatchdog("")         // 到点收工，状态栏交还连接层（P0）
             }
         }
         launchWatchdog?.post(poll)
     }
 
+    /** 统一停表：停轮询 + 清消息队列 + 复位启动层状态栏。
+     *  传 "" = 把状态栏完整交还连接层。
+     *  ⚠️ 安15：任何提前 return 的分支都必须走这里 —— 原实现在「令牌为空 /
+     *  JSON 解析失败」时直接 return@Thread，既不停表也不复位文字，状态栏被
+     *  「启动中：idle」永久占住，用户只能彻底退出 App 才恢复。 */
+    private fun stopLaunchWatchdog(finalText: String) {
+        launchWatchdogRunning = false
+        launchWatchdog?.removeCallbacksAndMessages(null)
+        if (finalText.isEmpty()) clearLaunchStatus() else setLaunchStatus(finalText)
+    }
+
     private fun checkLaunchStatus(finalCheck: Boolean) {
         Thread {
-            if (activeUrl.isEmpty() || authToken.isEmpty()) return@Thread
+            // P0 修复：连接都没了，启动监控就没有意义，立刻收工并交还状态栏。
+            // （原实现这里直接 return，状态栏从此卡死在「启动中：idle」）
+            if (activeUrl.isEmpty() || authToken.isEmpty()) {
+                stopLaunchWatchdog("")
+                return@Thread
+            }
             val resp = httpGet("$activeUrl/api/launch/status", authToken)
-            val json = try { JSONObject(resp ?: "") } catch (_: Exception) { null } ?: return@Thread
+            val json = try { JSONObject(resp ?: "") } catch (_: Exception) { null }
+            if (json == null) {
+                // 连续 3 次拿不到状态（电脑关了 / 网络断了）→ 收工，别无限空转
+                launchProbeMiss++
+                if (launchProbeMiss >= 3) stopLaunchWatchdog("启动状态查不到（先确认电脑是否还开着）")
+                return@Thread
+            }
+            launchProbeMiss = 0
             val state = json.optString("state", "")
             val error = json.optString("error", "")
             val pending = json.optBoolean("confirm_pending", false)
             val detail = json.optString("confirm_detail", "")
+            // idle = 这次启动压根没进入流程。宽限 2 轮（10 秒）给 exe 写状态的时间，
+            // 然后立刻收工 —— 原实现会为此白白空转满 4 分钟，且每 5 秒刷一次状态栏。
+            if (state == "idle") {
+                launchIdleCount++
+                if (launchIdleCount >= 2) {
+                    stopLaunchWatchdog("")
+                    toast("估价器没有进入启动流程，请在电脑上确认")
+                }
+                return@Thread
+            }
+            launchIdleCount = 0
             val hardFail = (state == "exited") || (state == "error")
             val failed = hardFail || (finalCheck && state != "running")
             if (failed) {
-                launchWatchdogRunning = false
-                launchWatchdog?.removeCallbacksAndMessages(null)
+                stopLaunchWatchdog("")
                 val reason = when {
                     error.isNotEmpty() -> error
                     pending -> "卡密验证窗口没关掉，需要到电脑上手动点「确定」"
@@ -2121,13 +2559,15 @@ class MainActivity : AppCompatActivity() {
                     else -> "启动失败"
                 }
                 val shown = if (detail.isNotEmpty()) "$reason（$detail）" else reason
-                runOnUiThread { statusView.text = "启动失败：$reason" }
+                runOnUiThread { setLaunchStatus("启动失败：$reason") }
                 notifyLaunchFailed(shown, launchAttemptId)
             } else if (finalCheck) {
-                runOnUiThread { statusView.text = "估价器已启动并正常运行" }
+                stopLaunchWatchdog("估价器已启动并正常运行")
             } else {
                 val tail = if (detail.isNotEmpty()) " · $detail" else ""
-                runOnUiThread { statusView.text = "启动中：$state$tail" }
+                val newTxt = "启动中：$state$tail"
+                // 防闪烁：文案没变就不动 UI（省掉每 5 秒一次的无谓重绘）
+                runOnUiThread { if (newTxt != launchStatusText) setLaunchStatus(newTxt) }
             }
         }.start()
     }
@@ -2166,8 +2606,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 低库存提醒 / 网络恢复提示都归「连接层」（setConnStatus 内部已处理线程切换）
     private fun statusRun(text: String) {
-        runOnUiThread { statusView.text = text }
+        setConnStatus(text)
     }
 
     /* ================= 网络监听（C2：断网恢复自动重连） ================= */
@@ -2431,7 +2872,8 @@ class MainActivity : AppCompatActivity() {
         val j = try { JSONObject(resp) } catch (_: Exception) { return false }
         val tok = j.optString("token", "")
         if (tok.isEmpty()) return false
-        authToken = tok
+        // P1：按本次登录的 server 存令牌；设备密钥登录成功即视为已配对
+        setToken(server, tok, j.optString("scope", ""), paired = true)
         passEnabled = j.optBoolean("pass_enabled", passEnabled)
         return true
     }
@@ -2486,7 +2928,7 @@ class MainActivity : AppCompatActivity() {
     // 忘记此配对：清掉密钥后需要重新走配对流程（同时清令牌）
     private fun forgetPairing(server: String) {
         clearDeviceKey(server)
-        authToken = ""
+        setToken(server, "")
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
@@ -2554,6 +2996,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         autoSyncRunning = false
         lowStockRunning = false
+        stopLaunchWatchdog("")   // P0：连消息队列一起清掉，不留跨生命周期的轮询
         netCallback?.let {
             try {
                 (getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager)

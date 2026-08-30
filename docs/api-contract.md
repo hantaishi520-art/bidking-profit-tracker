@@ -118,6 +118,7 @@
 
 ## 十、变更记录（倒序）
 
+- 2026-08-31：App 端 v1.11 连接层重做（纯 App 端改动，无 /api 变更）：令牌按服务器 URL 加密持久化，回前台以 `GET /api/status`（401/403 判失效）做轻量续连探测替代重新登录；多服务器 tab 秒切；报表页注入 IndexedDB 本地缓存层 + result.json ETag 对账 + 软刷新（`window.__bkSoftRefresh`）。接口行为与参数完全不变，PC 端不随本版发布。
 - 2026-08-30：公网密码在线试错锁定（连续错 5 次→锁 15 分钟，仅 public 计数、局域网不受限；/api/auth 与 /api/pair/request 的密码校验共用，锁定期 429）；报表页「🌐 公网 IP」改名「🌐 公网访问」（该域名非公网 IP，避免误导）；App 状态栏不再回显服务器地址；PC v1.4.0 / APK v1.8 (versionCode 9)。
 
 - 2026-08-30：性能与体验优化三件套——`/api/career-data` 新增 `since_ts` 增量参数并给每条对局注入 `uid`；静态文件支持 ETag/304 条件请求；生涯页改 IndexedDB 缓存+增量合并+前端分账过滤（ngrok 打开从 2-3 分钟 → 版本未变时秒开）；App 端 fetch/XHR 包装器提前到 `onPageStarted` 注入 + 道具/生涯页加重试（修 ngrok 免费版警告页导致「无法连接价格数据库」）；PC v1.3.0 / APK v1.3 (versionCode 4)。
