@@ -3832,6 +3832,20 @@
         loadSaveWarning();
         window.setInterval(loadSaveWarning, 10000);
         loadReportFromServer(false);
+        // 启动加速（2026-08-31）：首屏先展示上一次 result.json，再主动看一次解析状态——
+        // exe 已改为「页面先出、后台解析」。这里复用现成的 pollRefreshStatus()：
+        // running→显示「后台解析中，可继续查看旧结果」→done→自动重载最新；error→提示。
+        fetch("/api/status", { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(st => {
+            if (!st) return;
+            if (st.status === "idle" || st.status === "done") {
+              loadReportFromServer(true);   // 旧结果可能还没被刷新过，直接重载一次
+            } else {
+              pollRefreshStatus().catch(() => {});
+            }
+          })
+          .catch(() => {});
       };
       if (APP_MODE) {
         // App 模式：不轮询电脑端专属状态（ngrok/控制锁），但 server-info 拉一次

@@ -136,72 +136,110 @@ def extract_inventory(log, items_table=None):
     - BuildItems 行：登录/进仓库/开局时全量打印所有道具 + count（快照底数），含 quality(档位)/count(数量) 字段。
     - S2C_19_add_item_notify：买/用/获得道具的实时增量（OldCount→NewCount 绝对量）。
     两路按日志先后顺序合并（后出现覆盖先出现），得到最新持有量。
-    返回 dict: cid -> {'name': 名称, 'count': 数量, 'quality': 档位}。"""
+    返回 dict: cid -> {'name': 名称, 'count': 数量, 'quality': 档位}。
+
+    性能优化（2026-08-31）：引入 inventory_cache.json（与日志同目录，仿 silver_cache 范式）。
+    之前每次解析都 fp.read() 整个 Player.log（可达数 GB）再全量正则扫描，是启动慢的元凶之二。
+    现在按「日志文件大小 + 上次扫描偏移」增量：
+    - log_size 未变 → 缓存零 IO 复用；
+    - log_size 变大 → seek 到上次偏移只扫新增尾部（BuildItems 快照 + S2C_19 增量）；
+    - log_size 变小（日志被游戏清空/重置）或缓存损坏/版本不符 → 全量重扫重建缓存。
+    合并语义不变：按事件在日志中的 offset 排序，后出现的覆盖先出现的。"""
     import json as _json
+    cache_path = os.path.join(os.path.dirname(os.path.abspath(log)), "inventory_cache.json")
+    _CACHE_VER = 1
+
+    def _scan_tail(fp, start_offset, out):
+        """从 start_offset 扫到文件尾，把 BuildItems 快照 / S2C_19 增量按 offset 顺序合并进 out。"""
+        fp.seek(start_offset)
+        new_data = fp.read()
+        build_re = re.compile(
+            rb'BuildItems :\(item:([^\s]+) (\d{6}) (\d+),'
+            rb'size:[^,]+,qualityCID:\d+,No:\d+,quality:(\d+),'
+            rb'itemType:(\d+),pos:\d+,rotate:(?:True|False),'
+            rb'stockId:\d+,count:(\d+),canSale:(?:True|False)\)'
+        )
+        events = []  # (offset, kind, payload)
+        for m in build_re.finditer(new_data):
+            events.append((start_offset + m.start(), 'snap',
+                           (m.group(1).decode('utf-8', 'replace'),
+                            m.group(2).decode(),
+                            int(m.group(4)),
+                            int(m.group(6)))))
+        marker = b'(S2C_19_add_item_notify)'
+        p = new_data.find(marker)
+        while p != -1:
+            start = new_data.find(b'{', p)
+            depth = 0; i = start; n = len(new_data)
+            while i < n:
+                c = new_data[i]
+                if c == 123: depth += 1
+                elif c == 125:
+                    depth -= 1
+                    if depth == 0: break
+                i += 1
+            try:
+                d = _json.loads(new_data[start:i + 1])
+                events.append((start_offset + p, 'inc', d.get('ItemList', [])))
+            except Exception:
+                pass
+            p = new_data.find(marker, i)
+        events.sort(key=lambda e: e[0])   # 按日志中实际出现顺序，后出现覆盖先出现
+        for _off, kind, payload in events:
+            if kind == 'snap':
+                name, cid, quality, count = payload
+                out[cid] = {'name': name, 'count': count, 'quality': quality}
+            else:
+                for it in payload:
+                    cid = str(it.get('ItemCid', ''))
+                    if not cid or cid in ('1', '2'):
+                        continue  # 跳过银币/金币等货币
+                    nc = it.get('NewCount')
+                    if nc is None:
+                        continue
+                    out[cid] = {'name': '', 'count': int(nc), 'quality': 0}
+
     out = {}
     try:
-        with open(log, 'rb') as fp:
-            data = fp.read()
+        log_size = os.path.getsize(log)
     except Exception:
         return out
-
-    # --- 1) BuildItems 快照（itemType=道具大类型，quality=档位，count=数量）---
-    build_re = re.compile(
-        rb'BuildItems :\(item:([^\s]+) (\d{6}) (\d+),'
-        rb'size:[^,]+,qualityCID:\d+,No:\d+,quality:(\d+),'
-        rb'itemType:(\d+),pos:\d+,rotate:(?:True|False),'
-        rb'stockId:\d+,count:(\d+),canSale:(?:True|False)\)'
-    )
-    snap_events = []  # (offset, name, cid, quality, count)
-    for m in build_re.finditer(data):
-        snap_events.append((
-            m.start(),
-            m.group(1).decode('utf-8', 'replace'),
-            m.group(2).decode(),
-            int(m.group(4)),
-            int(m.group(6)),
-        ))
-
-    # --- 2) S2C_19 实时增量（CID -> NewCount 绝对量）---
-    inc_events = []  # (offset, itemlist)
-    marker = b'(S2C_19_add_item_notify)'
-    p = data.find(marker)
-    while p != -1:
-        start = data.find(b'{', p)
-        depth = 0; i = start; n = len(data)
-        while i < n:
-            c = data[i]
-            if c == 123: depth += 1
-            elif c == 125:
-                depth -= 1
-                if depth == 0: break
-            i += 1
+    # 读缓存
+    cache = None
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, "r", encoding="utf-8") as f:
+                loaded = _json.load(f)
+            if isinstance(loaded, dict) and loaded.get("version") == _CACHE_VER:
+                cache = loaded
+    except Exception:
+        cache = None
+    if cache is not None and cache.get("log_size") == log_size:
+        # 日志未变：零 IO 复用缓存
         try:
-            d = _json.loads(data[start:i + 1])
-            inc_events.append((p, d.get('ItemList', [])))
+            out = dict(cache.get("inventory", {}) or {})
+            return out
         except Exception:
-            pass
-        p = data.find(marker, i)
-
-    # --- 3) 合并 ---
-    # 关键：S2C_19 是服务端推给【当前账号】的实时绝对量（OldCount→NewCount），
-    # 必须作为权威值；BuildItems 是背包快照，可能来自其他账号或已过时，
-    # 故仅作为『没有任何增量事件时』的兜底底数（先填，再被 S2C_19 覆盖）。
-    for off, name, cid, quality, count in snap_events:
-        out[cid] = {'name': name, 'count': count, 'quality': quality}
-    for off, itemlist in inc_events:
-        for it in itemlist:
-            cid = str(it.get('ItemCid', ''))
-            if not cid or cid in ('1', '2'):
-                continue  # 跳过银币/金币等货币
-            nc = it.get('NewCount')
-            if nc is None:
-                continue
-            if cid in out:
-                out[cid]['count'] = int(nc)
+            out = {}
+    # 需要扫描
+    try:
+        with open(log, 'rb') as fp:
+            _tail_ok = (cache is not None
+                        and isinstance(cache.get("tail_offset"), int)
+                        and cache.get("log_size") is not None
+                        and log_size > int(cache["log_size"]))
+            if _tail_ok:
+                # 日志增长：只扫新增尾部，叠加到缓存结果上（tail_offset 无效视为缓存损坏 → 走全量）
+                base = dict(cache.get("inventory", {}) or {})
+                out = dict(base)
+                _scan_tail(fp, int(cache["tail_offset"]), out)
             else:
-                out[cid] = {'name': '', 'count': int(nc), 'quality': 0}
-
+                # 首次 / 日志变小（重置）/ 缓存损坏：全量重扫
+                out = {}
+                _scan_tail(fp, 0, out)
+            new_tail = fp.tell()   # 本次扫到哪（增量时=文件尾，全量时=文件尾）
+    except Exception:
+        return {}
     # 名称/档位兜底：用基础物品表补全 S2C_19 独有项
     if items_table:
         for cid, info in out.items():
@@ -209,6 +247,13 @@ def extract_inventory(log, items_table=None):
                 info['name'] = items_table[cid].get('n', '')
             if not info['quality'] and cid in items_table:
                 info['quality'] = items_table[cid].get('q', 0)
+    # 写缓存
+    try:
+        with open(cache_path, "w", encoding="utf-8") as f:
+            _json.dump({"version": _CACHE_VER, "log_size": log_size,
+                        "tail_offset": new_tail, "inventory": out}, f)
+    except Exception:
+        pass
     return out
 
 def emit(map_id, win_uid, ts, rounds, is_win, final_bid, w_final, w_name,

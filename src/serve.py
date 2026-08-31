@@ -2271,6 +2271,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         import sys
         print(f"[serve] {format % args}", file=sys.stderr, flush=True)
 
+    def _safe_write(self, buf):
+        # 客户端提前断开（关页面/切换标签）时，写响应会抛 ConnectionAbortedError
+        # / BrokenPipeError。这是无害噪音（2026-08-31 启动日志里那个异常就是它），
+        # 静默忽略即可，不再刷 stderr。
+        try:
+            self.wfile.write(buf)
+            self.wfile.flush()
+        except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+            pass
+
     def _send_json(self, obj, code=200):
         data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         # 大响应 gzip 压缩（2026-08-30）：生涯全量 JSON 约 60MB，经 ngrok 未压缩
@@ -2286,7 +2296,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(data)
+            self._safe_write(data)
             return
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -2296,7 +2306,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # App 的页面与接口同源、原生网络请求不走 CORS，删除不影响功能。
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        self._safe_write(data)
 
     # 静态资源访问控制：改为**白名单**制（默认拒绝）。
     # 原黑名单漏了 .exe/.apk/.zip/.md，导致 BidKing解析器.exe(17MB)、
@@ -2365,7 +2375,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data = f.read()
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(data)
+            self._safe_write(data)
         else:
             self.send_error(404, "Not found: " + path)
 

@@ -96,33 +96,6 @@ def main():
         return
 
     print("找到日志：", log)
-    print("正在解析（双数据源 S2C_89 + S2C45）...")
-    out = os.path.join(APP_DIR, "result.json")
-    csvp = os.path.join(RES_DIR, "item_prices.csv")
-    # 初始解析即实时增量落库到生涯数据库（解析一局写一局，关机也不丢），并刷新「上次导入时间」
-    conn = None
-    try:
-        conn = serve._career_db_connect()
-        def sink(rec, u):
-            try:
-                serve._career_db_insert_one(conn, rec, u)
-            except Exception:
-                pass
-        res = bidking_parser.parse(log, "auto", csvp, out, verbose=True, on_game=sink,
-                                    db_path=os.path.join(APP_DIR, "item_prices.db"))
-        serve._career_db_touch_last_import()
-    except Exception as e:
-        pause_exit("解析失败：" + str(e))
-        return
-    finally:
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-    s = res["summary"]
-    print(f"解析完成：共 {s['games']} 场，拿仓 {s['wins']} / 未拿 {s['losses']}，盈亏 {s['profit']:+d}")
     print("正在启动本地服务器并打开报表...")
 
     PORT = 8766
@@ -170,6 +143,17 @@ def main():
     except Exception:
         pass
     print("已打开报表页面：", url)
+    # 启动加速（2026-08-31）：页面先出，解析放后台跑。
+    # 之前是先解析完（5.2GB 日志全扫）才开页面，导致等待约 1 分钟；
+    # 现在页面秒出（先显示上一次的 result.json），后台解析完成后页面自动刷新。
+    # 复用 serve.run_parse（现成后台线程：STATE 状态机 + 生涯库逐局落库 + 覆盖保护），
+    # 语义与旧流程完全一致，只是挪进了后台线程。
+    try:
+        threading.Thread(target=serve.run_parse, args=("auto",), daemon=True).start()
+    except Exception as e:
+        print("后台解析启动失败：", e)
+    print("页面已打开，正在后台解析（控制台可见进度）；解析完成后报表自动刷新，"
+          "期间可继续查看上一次战绩。")
     print("关闭此窗口（或 Ctrl+C）即可退出；期间可点报表内「实时刷新」重新解析战绩。")
 
     # 公网开关联动退出（2026-08-29 用户反馈）：解析器退出时把 ngrok 一并带走，
