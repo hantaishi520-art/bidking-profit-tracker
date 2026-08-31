@@ -2054,6 +2054,11 @@
         showError("另一台设备正在自动刷新，本页面暂时不能触发解析。");
         return false;
       }
+      // 手动「实时刷新」= 用户明确要求重新解析：直接 POST /api/refresh 触发解析。
+      // （此前加的「已是最新」短路已移除（2026-08-31 P2）：exe 启动后 /api/status 恒为 done，
+      //  且页面内存 __hasGames 感知不到日志新增对局，导致短路永远命中、手动刷新被拦截、
+      //  exe 不再解析新局。后端 /api/refresh 本身有防并发（解析中再 POST 会提示"正在解析中"），
+      //  不会重复起任务。）
       refreshInFlight = true;
       captureCurrentSummary();
       refreshBtn.disabled = true;
@@ -3853,6 +3858,22 @@
         loadServerInfo();
         // 等原生令牌注入就绪再拉数据（修复 局域网+已设密码 时的 401 竞态）
         waitForAppToken(startDataLoads);
+        // 回前台兜底（2026-08-31，用户反馈：App 切后台回来不自动刷新、点刷新没反应）：
+        // 页面自身监听 visibilitychange——从后台回到前台可见时，纯拉最新 result.json
+        // （ETag 对账/304，零解析），绝不 POST /api/refresh 触发 exe 全量重扫；
+        // 仅当 /api/status 显示 running（exe 正在解析）时复用轮询，完成后自动重载。
+        // 3 秒防抖：避免切后台-切前台反复触发。
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState !== "visible") return;
+          const now = Date.now();
+          if (window.__bkLastVisibleAt && now - window.__bkLastVisibleAt < 3000) return;
+          window.__bkLastVisibleAt = now;
+          loadReportFromServer(true);
+          fetch("/api/status", { cache: "no-store" })
+            .then(r => r.ok ? r.json() : null)
+            .then(st => { if (st && st.status === "running") pollRefreshStatus().catch(() => {}); })
+            .catch(() => {});
+        });
       } else {
         loadServerInfo();
         window.setInterval(loadServerInfo, 10000);

@@ -158,6 +158,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var lowStockRunning = false
     @Volatile private var autoSyncRunning = false       // exe 端刷新后 App 自动同步（问题 1）
     private var lastSyncState = ""            // 上次 /api/status 的 state 摘要
+    private var lastResumeSoftRefreshAt = 0L  // 上次回前台软刷新的时间戳（3 秒防抖，避免与 autoSync 并发重复刷）
     private var lastBackPressed = 0L          // 上次按返回键时间（I1：再按一次退出防误关）
     private var netCallback: android.net.ConnectivityManager.NetworkCallback? = null  // 网络变化监听（C2 自动重连）
 
@@ -835,6 +836,18 @@ class MainActivity : AppCompatActivity() {
                     setConnStatus("连接已过期，正在重新登录…")
                     setToken(key, "")
                     connect(key, activeTabPwd())
+                }
+            } else if (code == 200) {
+                // 切后台返回（2026-08-31 P1）：令牌有效就【软刷新当前页】拉最新 result.json。
+                // 只拉数据不触发 exe 重解析（页面 __bkSoftRefresh 走 ETag 对账/重渲染，零解析）。
+                // 3 秒防抖：onResume 与 autoSyncMonitor 可能几乎同时到，避免重复刷。
+                val now = System.currentTimeMillis()
+                if (now - lastResumeSoftRefreshAt > 3_000L) {
+                    lastResumeSoftRefreshAt = now
+                    val wv = webViews[key]
+                    if (wv != null) {
+                        runOnUiThread { softRefresh(wv) }
+                    }
                 }
             }
         }

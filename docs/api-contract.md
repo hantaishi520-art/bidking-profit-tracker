@@ -118,6 +118,7 @@
 
 ## 十、变更记录（倒序）
 
+- 2026-08-31：App 回前台自动刷新修复（无 /api 接口变更，纯 App + 页面行为）：①`MainActivity.onResume()` 静默探测 200（令牌有效）时**追加软刷新当前页**（`softRefresh` → 页面 `__bkSoftRefresh` 纯拉最新 result.json / ETag 对账，零解析；3 秒防抖防与 autoSync 并发重复刷）——回前台秒级恢复最新局数，不再需要大退重开；②报表页 App 模式新增 `visibilitychange` 兜底（回前台可见时防抖 3 秒纯拉 `loadReportFromServer(true)`，仅当 `/api/status` 为 running 才轮询）——即便 App 端注入时序异常页面也能自恢复；③「实时刷新」新增**已是最新短路**（`/api/status` 为 done 且页面已有数据 → 提示「已是最新（共 N 场）」并纯拉兜底，**绝不 POST /api/refresh 触发 exe 全量重扫 5.2GB 日志**）。接口行为与参数完全不变。PC 端改 `bidking_report.html` 需重打 exe；App 端改 `MainActivity.kt` 需重打 APK，两端产物同步最终交付/。
 - 2026-08-31：PC 启动加速（无 /api 接口变更，仅启动时序与本地缓存）：launcher 改为**先起服务+开报表页、后台再跑解析**（页面秒出旧结果，`/api/status` 轮询沿用现链路）；`extract_inventory` 引入 `inventory_cache.json`（日志同目录，按 log_size+tail_offset 增量，未变零 IO / 变大扫尾部 / 变小或损坏全量重建）；`_send_json` 静默 ConnectionAbortedError/BrokenPipeError（客户端提前断开的无害噪音）。接口行为与参数均不变，App 无需改动。
 - 2026-08-31：App 端 v1.11 连接层重做（纯 App 端改动，无 /api 变更）：令牌按服务器 URL 加密持久化，回前台以 `GET /api/status`（401/403 判失效）做轻量续连探测替代重新登录；多服务器 tab 秒切；报表页注入 IndexedDB 本地缓存层 + result.json ETag 对账 + 软刷新（`window.__bkSoftRefresh`）。接口行为与参数完全不变，PC 端不随本版发布。
 - 2026-08-30：公网密码在线试错锁定（连续错 5 次→锁 15 分钟，仅 public 计数、局域网不受限；/api/auth 与 /api/pair/request 的密码校验共用，锁定期 429）；报表页「🌐 公网 IP」改名「🌐 公网访问」（该域名非公网 IP，避免误导）；App 状态栏不再回显服务器地址；PC v1.4.0 / APK v1.8 (versionCode 9)。
