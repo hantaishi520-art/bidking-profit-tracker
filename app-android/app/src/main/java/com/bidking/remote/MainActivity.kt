@@ -1445,7 +1445,7 @@ class MainActivity : AppCompatActivity() {
             wv?.evaluateJavascript(AppEnhance.REPORT_CARDS_JS, null)
             wv?.evaluateJavascript(AppEnhance.FAB_JS, null)
         }
-        // 生涯页：各地图大类/24h/高价值 三合一切换 + 点行弹本局详情 + 「前往该局」卡死修复 + 回到顶部悬浮按钮
+        // 生涯页：三合一切换 + 明细卡片化（与报表页同款 12 字段卡片 + 同款点行/拍品弹窗）+ 回到顶部
         else if (url.contains("bidking_career.html")) {
             wv?.evaluateJavascript(AppEnhance.CAREER_ENHANCE_JS, null)
             wv?.evaluateJavascript(AppEnhance.CAREER_ROW_MODAL_JS, null)
@@ -1624,32 +1624,37 @@ class MainActivity : AppCompatActivity() {
                   'html.app-mode .table-wrap tbody td:nth-child(n+7) { font-weight:800 !important; font-size:13px !important; line-height:1.2 !important; }'
                 ].join('');
                 document.head.appendChild(st);
-                /* 报表页卡片点击分流（2026-09-04 用户反馈，对齐生涯页交互）：
-                   点「拍下物品」格（含 展开/收起 按钮）→ 纯拍品弹窗（生涯页同款）；
-                   点卡片其余任意位置 → 本局详情弹窗（12 字段 + 拍品）。
-                   capture 阶段拦截，页面自身的内联展开不再触发。
-                   注： won-list 元素可能因此前点击已展开，分流后属残留 DOM，
-                   打开弹窗前统一 hidden 掉，避免卡片下方露出半截列表。 */
-                document.addEventListener('click', function(e){
-                  var wonTd = e.target.closest('td.won-items');
-                  var tr = (wonTd ? wonTd : e.target.closest('#tableBody tr'));
-                  if (!tr || !tr.querySelector('td')) return;
-                  var g = window.__bkCollectRow ? window.__bkCollectRow(tr) : null;
-                  if (!g) return;
-                  if (wonTd) {
-                    if (!g.won_items || !g.won_items.length) return;
-                    e.stopPropagation(); e.preventDefault();
-                    tr.querySelectorAll('.won-item-list').forEach(function(el){ el.hidden = true; });
-                    var tg = tr.querySelector('.won-toggle');
-                    if (tg) { tg.setAttribute('aria-expanded','false'); tg.textContent = '展开'; }
-                    if (window.__bkWonModal) window.__bkWonModal.open(g);
-                  } else if (e.target.closest('button, a, input, select')) {
-                    return;   // 卡片内的其它按钮（若有）保持页面自身行为
-                  } else {
-                    e.stopPropagation(); e.preventDefault();
-                    if (window.__bkGameModal) window.__bkGameModal.open(g);
-                  }
-                }, true);
+                /* 报表页卡片点击分流（2026-09-04 用户反馈 v2）：弹窗已就绪，此前「点『展开』
+                   无反应」的根因是时序——本监听在 onPageFinished 注入，而 __bkWonModal /
+                   __bkGameModal 在 GAME_MODAL_JS 里定义，两条 evaluateJavascript 有先后；
+                   且 800ms 补注入会再次执行本块。解法：①监听器只挂一次（window 标记）；
+                   ②handler 内部实时取 window.__bkWonModal / __bkGameModal（本就如此），
+                   并在未就绪时回退为页面默认行为（不吞点击）。 */
+                if (!window.__bkReportTapSplit) {
+                  window.__bkReportTapSplit = 1;
+                  document.addEventListener('click', function(e){
+                    var wonTd = e.target.closest('td.won-items');
+                    var tr = (wonTd ? wonTd : e.target.closest('#tableBody tr'));
+                    if (!tr || !tr.querySelector('td')) return;
+                    var g = window.__bkCollectRow ? window.__bkCollectRow(tr) : null;
+                    if (!g) return;
+                    if (wonTd) {
+                      if (!g.won_items || !g.won_items.length) return;
+                      if (!window.__bkWonModal) return;   // 弹窗脚本未就绪：不拦，放行页面默认行为
+                      e.stopPropagation(); e.preventDefault();
+                      tr.querySelectorAll('.won-item-list').forEach(function(el){ el.hidden = true; });
+                      var tg = tr.querySelector('.won-toggle');
+                      if (tg) { tg.setAttribute('aria-expanded','false'); tg.textContent = '展开'; }
+                      window.__bkWonModal.open(g);
+                    } else if (e.target.closest('button, a, input, select')) {
+                      return;   // 卡片内的其它按钮（若有）保持页面自身行为
+                    } else {
+                      if (!window.__bkGameModal) return;
+                      e.stopPropagation(); e.preventDefault();
+                      window.__bkGameModal.open(g);
+                    }
+                  }, true);
+                }
               } catch (e) {}
             })();
         """
@@ -2057,26 +2062,32 @@ class MainActivity : AppCompatActivity() {
                   html.app-mode #careerTableScroll table { min-width: 0 !important; display: block !important; width: 100% !important; font-size: 12px !important; }
                   html.app-mode #careerTableScroll table thead { display: none !important; }
                   html.app-mode #careerTableScroll table tbody { display: block !important; }
+                  /* 生涯卡片（2026-09-04 与报表页统一为同款 12 字段卡片）：
+                     4 列两行布局 = 报表页 REPORT_CARDS_JS 同构，字段全量不裁剪；
+                     行高自适应（不再固定 92px），CARD_H 下方同步改 118 估虚拟滚动步长。 */
                   html.app-mode #careerTableScroll table tbody tr:not(.vs-spacer) {
-                    display: grid !important; grid-template-columns: repeat(3, 1fr) !important;
-                    gap: 1px 10px !important; height: 92px !important; box-sizing: border-box !important;
-                    padding: 8px 10px 2px !important; margin: 0 0 6px 0 !important;
+                    display: grid !important; grid-template-columns: repeat(4, 1fr) !important;
+                    gap: 6px 10px !important; height: auto !important; box-sizing: border-box !important;
+                    padding: 10px 12px 10px !important; margin: 0 0 8px 0 !important;
                     border: 1px solid var(--line) !important; border-radius: 10px !important;
+                    background: var(--panel) !important;
                     overflow: hidden !important;
                   }
                   html.app-mode #careerTableScroll table tbody tr.vs-spacer { display: block !important; padding: 0 !important; margin: 0 !important; border: 0 !important; background: transparent !important; }
                   html.app-mode #careerTableScroll table tbody tr.vs-spacer td { display: none !important; }
                   html.app-mode #careerTableScroll table td { display: block !important; padding: 0 !important; border: 0 !important; height: auto !important; min-height: 0 !important; vertical-align: top !important; text-align: left !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
-                  html.app-mode #careerTableScroll table td::before { display: block !important; color: var(--muted) !important; font-size: 9px !important; line-height: 1.15 !important; content: attr(data-label); }
+                  html.app-mode #careerTableScroll table td::before { display: block !important; color: var(--muted) !important; font-size: 9px !important; line-height: 1.15 !important; margin-bottom: 1px !important; content: attr(data-label); }
                   html.app-mode #careerTableScroll table td.won-items { overflow: visible !important; }
-                  html.app-mode #careerTableScroll table .won-toggle { min-height: 0 !important; height: auto !important; padding: 2px 8px !important; margin: 0 !important; line-height: 1.3 !important; }
-                  /* 主表列裁剪：隐藏 回合/赢家/道具/赢家出价/对手最高价，保留核心 7 列 */
-                  html.app-mode #careerTableScroll table tbody td:nth-child(2),
-                  html.app-mode #careerTableScroll table tbody td:nth-child(5),
-                  html.app-mode #careerTableScroll table tbody td:nth-child(7),
-                  html.app-mode #careerTableScroll table tbody td:nth-child(8),
-                  html.app-mode #careerTableScroll table tbody td:nth-child(9),
-                  html.app-mode #careerTableScroll table tbody td:nth-child(10) { display: none !important; }
+                  html.app-mode #careerTableScroll table .won-toggle { min-height: 0 !important; height: auto !important; padding: 2px 8px !important; margin: 0 !important; line-height: 1.3 !important; cursor: pointer; }
+                  /* 与报表页同款排版：时间加粗稍大、赢家第 4 列右对齐、数字字段加粗 */
+                  html.app-mode #careerTableScroll table td:nth-child(1) { font-weight: 800 !important; font-size: 13px !important; line-height: 1.2 !important; }
+                  html.app-mode #careerTableScroll table td:nth-child(4) { grid-column: 4; text-align: right !important; }
+                  html.app-mode #careerTableScroll table td:nth-child(4)::before { text-align: right !important; }
+                  html.app-mode #careerTableScroll table td:nth-child(6),
+                  html.app-mode #careerTableScroll table td:nth-child(n+7) { font-weight: 800 !important; font-size: 13px !important; line-height: 1.2 !important; }
+                  /* 拍下物品列在卡片上显示「N 件 ▸」按钮（生涯页原生结构），点击弹拍品弹窗；
+                     行内列表不存在，无需处理 */
+                  /* 主表 12 列全展示（2026-09-04 与报表页统一）：不再裁剪 回合/赢家/道具/出价列 */
                   /* 其它 4 个面板仍保持卡片化（横向滚动已经处理，这里只恢复主表） */
                   html.app-mode #mapCounts table,
                   html.app-mode #careerMapValueStats table,
@@ -2113,14 +2124,14 @@ class MainActivity : AppCompatActivity() {
                      本块带 secs.length<3 时序守卫，可能整块不注入，靠不住；
                      底色必须放无条件注入的样式表才能保证卡片/表格两种渲染下都生效。 */
                 `;
-                /* 明细卡片化渲染（2026-08-30）：页面 ROW_H=44 是顶层 const 改不了，
-                   顶层 function 声明即 window 属性 → 整体替换为按卡片高度 CARD_H=92
-                   （卡高 86 + 卡间距 6）计算的版本，页面内所有调用同步生效。
+                /* 明细卡片化渲染（2026-08-30；2026-09-04 换 12 字段卡片后 CARD_H=118）：
+                   页面 ROW_H=44 是顶层 const 改不了，顶层 function 声明即 window 属性 →
+                   整体替换为按卡片高度 CARD_H 计算的版本，页面内所有调用同步生效。
                    拿仓行 win-positive/win-negative 类由页面 buildCareerRowsHtml 照常
                    生成，配色底色由 injectTouchFeel 的 !important 规则着色（安12）。 */
                 try {
                   if (typeof currentFilteredRows !== 'undefined' && typeof buildCareerRowsHtml === 'function') {
-                    const CARD_H = 98;   // 卡高 92 + 卡间距 6
+                    const CARD_H = 118;   // 12 字段两行卡片估高 ~112 + 卡间距 8（2026-09-04 与报表页统一后调大）
                     window.__bkCardH = CARD_H;
                     window.renderVirtualRows = function() {
                       const total = currentFilteredRows.length;

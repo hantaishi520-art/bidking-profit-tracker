@@ -111,7 +111,7 @@ STATE_LOCK = threading.Lock()
 _PARSE_THREAD = None
 
 # ---- 版本署名（2026-08-30）：页面页脚 / server-info / 启动打印 共用这一个来源 ----
-APP_VERSION = "1.4.4"
+APP_VERSION = "1.4.5"
 APP_SIGNATURE = "开源版"
 
 # ---- 自动缺失拍品扫描缓存 ----
