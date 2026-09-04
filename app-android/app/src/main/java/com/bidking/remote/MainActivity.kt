@@ -1624,34 +1624,92 @@ class MainActivity : AppCompatActivity() {
                   'html.app-mode .table-wrap tbody td:nth-child(n+7) { font-weight:800 !important; font-size:13px !important; line-height:1.2 !important; }'
                 ].join('');
                 document.head.appendChild(st);
-                /* 报表页卡片点击分流（2026-09-04 用户反馈 v2）：弹窗已就绪，此前「点『展开』
-                   无反应」的根因是时序——本监听在 onPageFinished 注入，而 __bkWonModal /
-                   __bkGameModal 在 GAME_MODAL_JS 里定义，两条 evaluateJavascript 有先后；
-                   且 800ms 补注入会再次执行本块。解法：①监听器只挂一次（window 标记）；
-                   ②handler 内部实时取 window.__bkWonModal / __bkGameModal（本就如此），
-                   并在未就绪时回退为页面默认行为（不吞点击）。 */
+                /* 报表页卡片点击分流（2026-09-04 用户反馈 v3）：v1.15 把「弹窗未就绪就放行」
+                   仍留了竞态尾巴——真机上放行分支被执行（页面 toggle 把按钮翻成「收起」，
+                   列表又被 CSS 藏住 → 用户看到「变收起但没弹窗」）。本版根除：
+                   纯拍品弹窗【惰性自建】在本块内（ensureWonModal），不再依赖 GAME_MODAL_JS
+                   先行注入；本局详情弹窗同理兜底。拦截后必有下文，放行分支只留给
+                   「无拍品的局」。 */
                 if (!window.__bkReportTapSplit) {
                   window.__bkReportTapSplit = 1;
+                  function bkEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+                  function bkNum(s){ return String(s==null?'':s).replace(/,/g,'').replace(/[+\-]/g,''); }
+                  function ensureWonModal(){
+                    var m = document.getElementById('__bkWonModal');
+                    if (m) return m;
+                    var st = document.createElement('style');
+                    st.id = '__bkWonModalStyle';
+                    st.textContent = [
+                      '#__bkWonModal{position:fixed;inset:0;background:rgba(20,16,10,.45);display:none;align-items:center;justify-content:center;z-index:60;}',
+                      '#__bkWonModal .wk-modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:min(92vw,440px);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3);}',
+                      '#__bkWonModal .wk-head{display:flex;justify-content:space-between;align-items:center;font-weight:900;margin-bottom:10px;gap:12px;}',
+                      '#__bkWonModal .wk-close{min-height:30px;padding:2px 10px;background:#888;color:#fff;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-weight:800;}',
+                      '#__bkWonModal .wk-body{overflow:auto;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;}',
+                      '#__bkWonModal .won-item{display:inline-flex;align-items:center;gap:5px;margin:2px 4px 2px 0;padding:3px 7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-weight:800;font-size:12px;}',
+                      '#__bkWonModal .won-item-value{color:var(--accent);}',
+                      '#__bkWonModal .won-item-quality{color:var(--muted);font-weight:700;}'
+                    ].join('');
+                    document.head.appendChild(st);
+                    m = document.createElement('div');
+                    m.id = '__bkWonModal';
+                    m.innerHTML = '<div class="wk-modal"><div class="wk-head"><span></span><button class="wk-close" type="button" aria-label="关闭">✕</button></div><div class="wk-body"></div></div>';
+                    m.addEventListener('click', function(e){ if (e.target === m || e.target.closest('.wk-close')) m.style.display='none'; });
+                    document.body.appendChild(m);
+                    return m;
+                  }
+                  function openWonInline(g){
+                    var m = ensureWonModal();
+                    m.querySelector('.wk-head span').textContent = (g.time||'') + (g.map_name ? ' · ' + g.map_name : '');
+                    var items = (g.won_items || []).slice().sort(function(a,b){ return Number(b.value||0)-Number(a.value||0); });
+                    var list = items.map(function(it){
+                      var q = it.quality ? '<span class="won-item-quality">Q'+bkEsc(it.quality)+'</span>' : '';
+                      return '<span class="won-item" title="CID '+bkEsc(it.cid||'')+'">'+bkEsc(it.name||'?')+' '+q+'<span class="won-item-value">'+bkNum(it.value)+'</span></span>';
+                    }).join('');
+                    m.querySelector('.wk-body').innerHTML = list || '<div style="color:var(--muted);font-size:13px;">本局未拍下物品</div>';
+                    m.style.display = 'flex';
+                  }
+                  window.__bkOpenWonInline = openWonInline;   // 生涯页也可复用
+                  /* collectRow 自包含副本（2026-09-04 v4）：此前依赖 GAME_MODAL_JS 里的
+                     window.__bkCollectRow，该块若未跑成（真机时序），handler 里
+                     g=null → 静默 return → 「点了没反应/只变收起」。12 列采集逻辑
+                     与 GAME_MODAL_JS 保持一致，两处并存无害（幂等语义相同）。 */
+                  function bkCollectRow(tr){
+                    var tds = tr.querySelectorAll('td');
+                    if (!tds || tds.length < 12) return null;
+                    var itemsText = tds[4].getAttribute('title') || tds[4].textContent.trim();
+                    var won = Array.from(tr.querySelectorAll('td:nth-child(6) .won-item')).map(function(el){
+                      var q = el.querySelector('.won-item-quality');
+                      var v = el.querySelector('.won-item-value');
+                      return { name: (el.childNodes[0] ? el.childNodes[0].textContent.trim() : ''), quality: q ? q.textContent.replace('Q','').trim() : '', value: v ? v.textContent.trim() : '' };
+                    });
+                    var t = function(i){ return tds[i].textContent.trim(); };
+                    return {
+                      time: t(0), rounds: t(1), map_name: t(2), winner: t(3),
+                      items_text: itemsText, won_text: t(5),
+                      final_bid: t(6), winner_final_bid: t(7), opponent_bid: t(8),
+                      actual_value: t(9), disp_profit: t(10), my_profit: t(11),
+                      won_items: won
+                    };
+                  }
                   document.addEventListener('click', function(e){
                     var wonTd = e.target.closest('td.won-items');
                     var tr = (wonTd ? wonTd : e.target.closest('#tableBody tr'));
                     if (!tr || !tr.querySelector('td')) return;
-                    var g = window.__bkCollectRow ? window.__bkCollectRow(tr) : null;
+                    var g = bkCollectRow(tr);
                     if (!g) return;
                     if (wonTd) {
-                      if (!g.won_items || !g.won_items.length) return;
-                      if (!window.__bkWonModal) return;   // 弹窗脚本未就绪：不拦，放行页面默认行为
+                      if (!g.won_items || !g.won_items.length) return;   // 无拍品：放行页面默认（显示 --）
                       e.stopPropagation(); e.preventDefault();
                       tr.querySelectorAll('.won-item-list').forEach(function(el){ el.hidden = true; });
                       var tg = tr.querySelector('.won-toggle');
                       if (tg) { tg.setAttribute('aria-expanded','false'); tg.textContent = '展开'; }
-                      window.__bkWonModal.open(g);
+                      openWonInline(g);
                     } else if (e.target.closest('button, a, input, select')) {
                       return;   // 卡片内的其它按钮（若有）保持页面自身行为
                     } else {
-                      if (!window.__bkGameModal) return;
                       e.stopPropagation(); e.preventDefault();
-                      window.__bkGameModal.open(g);
+                      if (window.__bkGameModal) { window.__bkGameModal.open(g); return; }
+                      openWonInline(g);   // 详情弹窗未就绪的兜底：至少把拍品弹出来
                     }
                   }, true);
                 }
