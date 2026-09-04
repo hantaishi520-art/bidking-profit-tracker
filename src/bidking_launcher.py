@@ -42,6 +42,71 @@ def pause_exit(msg=None):
     except Exception:
         pass
 
+# ---- 端口占用处理（2026-09-04 用户反馈）----
+# 之前端口被占直接报错退出，小白用户只能干瞪眼。现在改为：列出占用进程 →
+# 控制台询问是否释放（y/n）→ 用户确认才 taskkill → 重试绑定。
+# 注意：绝不静默杀进程；PID 来自 netstat -ano 解析（不用 cmd for /f，
+# IPv6 行/中文列头下 tokens=5 会错位），杀之前必须让用户亲眼确认。
+def _port_listen_pids(port):
+    """返回正在 LISTENING 该 TCP 端口的进程 PID 列表（字符串）。"""
+    import subprocess
+    pids = set()
+    try:
+        # 中文 Windows 控制台工具输出是 GBK 编码，用默认 utf-8 解码会 UnicodeDecodeError
+        out = subprocess.run(["netstat", "-ano", "-p", "TCP"],
+                             capture_output=True, text=True, timeout=10,
+                             encoding="gbk", errors="replace").stdout or ""
+    except Exception:
+        return pids
+    for line in out.splitlines():
+        parts = line.split()
+        # 形如: TCP  0.0.0.0:8766  0.0.0.0:0  LISTENING  1234
+        if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[3].upper() == "LISTENING":
+            local = parts[1]
+            if local.rsplit(":", 1)[-1] == str(port):
+                pid = parts[-1]
+                if pid.isdigit() and pid != "0":
+                    pids.add(pid)
+    return pids
+
+def _pid_image_name(pid):
+    """查 PID 的进程映像名，仅用于展示给用户确认，不参与自动判断。"""
+    import subprocess
+    try:
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                             capture_output=True, text=True, timeout=10,
+                             encoding="gbk", errors="replace").stdout or ""
+        line = out.strip().splitlines()[0] if out.strip() else ""
+        if line.startswith('"'):
+            return line.split('","')[0].strip('"')
+    except Exception:
+        pass
+    return "(未知进程)"
+
+def _try_free_port(port):
+    """端口被占时在控制台询问用户。返回 True=已释放（或本来就没占住），False=用户拒绝/释放失败。"""
+    import subprocess
+    for _attempt in range(2):   # 询问最多两轮（杀完可能还有残留监听）
+        pids = _port_listen_pids(port)
+        if not pids:
+            return True
+        listing = "\n".join(f"  PID {p}  {_pid_image_name(p)}" for p in sorted(pids, key=int))
+        print(f"\n端口 {port} 已被以下进程占用：\n{listing}")
+        try:
+            ans = input(f"是否结束上面这些进程并继续启动？(y=结束并继续 / n=退出)：").strip().lower()
+        except Exception:
+            ans = ""
+        if ans != "y":
+            return False
+        for p in pids:
+            try:
+                subprocess.run(["taskkill", "/F", "/PID", p],
+                               capture_output=True, text=True, timeout=10)
+            except Exception:
+                pass
+        time.sleep(1)   # 等 TIME_WAIT/句柄释放
+    return not _port_listen_pids(port)
+
 def main():
     import bidking_parser
     import serve
@@ -121,9 +186,16 @@ def main():
     try:
         srv = serve.make_server(PORT, APP_DIR)
     except OSError as e:
-        pause_exit(f"端口 {PORT} 启动失败：{e}\n"
-                   "可能被其他程序占用。请重启电脑后再试，或换一个端口（高级用法）。")
-        return
+        # 端口被占：询问用户是否释放（2026-09-04 用户反馈），不再直接退出
+        if not _try_free_port(PORT):
+            pause_exit(f"端口 {PORT} 启动失败：{e}\n"
+                       "该端口仍被占用。请关闭占用它的程序（或重启电脑）后再试。")
+            return
+        try:
+            srv = serve.make_server(PORT, APP_DIR)
+        except OSError as e2:
+            pause_exit(f"端口 {PORT} 仍无法启动：{e2}\n请重启电脑后再试。")
+            return
     threading.Thread(target=srv.serve_forever, daemon=True).start()
 
     # 等服务器就绪再打开浏览器（否则可能空白/下载）

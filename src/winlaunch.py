@@ -769,3 +769,70 @@ def kill_images(image_names):
             except Exception:
                 pass
     return killed
+
+
+# ---- 原生文件选择框（2026-09-04 用户反馈：网页手填估价器路径太麻烦）----
+# 用 comdlg32.GetOpenFileNameW 弹 Windows 原生「打开文件」对话框，零第三方依赖。
+# 刻意不用 tkinter.filedialog：Nuitka 打 tkinter 要开 tk-inter 插件，onefile 体积
+# +10~20MB 且是打包翻车重灾区（见防踩坑指南·构）。
+
+_OFN_FILEMUSTEXIST = 0x00001000
+_OFN_HIDEREADONLY = 0x00000004
+
+
+def native_pick_exe_file(title="选择程序", initial_dir=None):
+    """弹出系统文件选择框，返回选中的完整路径（绝对路径）；取消/失败返回 ""。
+
+    可在任意线程调用（含 ThreadingHTTPServer 的 HTTP 工作线程）：对话框自带
+    模态消息循环。注意调用会阻塞该线程直到用户选择/取消，调用方需自行接受。
+    """
+    if not IS_WIN:
+        return ""
+
+    class OPENFILENAMEW(ctypes.Structure):
+        _fields_ = [
+            ("lStructSize", wintypes.DWORD),
+            ("hwndOwner", wintypes.HWND),
+            ("hInstance", wintypes.HINSTANCE),
+            ("lpstrFilter", wintypes.LPCWSTR),
+            ("lpstrCustomFilter", wintypes.LPWSTR),
+            ("nMaxCustFilter", wintypes.DWORD),
+            ("nFilterIndex", wintypes.DWORD),
+            ("lpstrFile", wintypes.LPWSTR),
+            ("nMaxFile", wintypes.DWORD),
+            ("lpstrFileTitle", wintypes.LPWSTR),
+            ("nMaxFileTitle", wintypes.DWORD),
+            ("lpstrInitialDir", wintypes.LPCWSTR),
+            ("lpstrTitle", wintypes.LPCWSTR),
+            ("Flags", wintypes.DWORD),
+            ("nFileOffset", wintypes.WORD),
+            ("nFileExtension", wintypes.WORD),
+            ("lpstrDefExt", wintypes.LPCWSTR),
+            ("lCustData", wintypes.LPARAM),
+            ("lpfnHook", wintypes.LPVOID),
+            ("lpTemplateName", wintypes.LPCWSTR),
+            # 2000+ 扩展字段（钩子/占位符需要），Win32 文档要求按此完整结构
+            ("pvReserved", ctypes.c_void_p),
+            ("dwReserved", wintypes.DWORD),
+            ("FlagsEx", wintypes.DWORD),
+        ]
+
+    buf = ctypes.create_unicode_buffer(2048)
+    ofn = OPENFILENAMEW()
+    ofn.lStructSize = ctypes.sizeof(OPENFILENAMEW)
+    ofn.hwndOwner = None
+    # 双 null 结尾的 filter 对：显示文本 \0 模式 \0 …… 末尾再补一个 \0
+    ofn.lpstrFilter = "程序文件 (*.exe)\x00*.exe\x00所有文件 (*.*)\x00*.*\x00"
+    ofn.lpstrFile = buf
+    ofn.nMaxFile = len(buf)
+    ofn.lpstrInitialDir = str(initial_dir) if initial_dir else None
+    ofn.lpstrTitle = str(title) if title else None
+    ofn.Flags = _OFN_FILEMUSTEXIST | _OFN_HIDEREADONLY
+
+    try:
+        ok = ctypes.windll.comdlg32.GetOpenFileNameW(ctypes.byref(ofn))
+    except Exception:
+        return ""
+    if not ok:
+        return ""
+    return os.path.abspath(buf.value)

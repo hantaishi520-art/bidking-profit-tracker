@@ -966,6 +966,20 @@
       <input id="fileInput" type="file" accept=".json,application/json" hidden>
     </section>
 
+    <!-- 历史快照选择弹窗（2026-09-04：「选择 JSON」升级，可续看游戏重启/崩溃前的完整战绩） -->
+    <div class="modal-backdrop" id="snapshotModal" aria-hidden="true">
+      <section class="profit-modal" role="dialog" aria-modal="true" aria-labelledby="snapshotModalTitle">
+        <h2 id="snapshotModalTitle" class="modal-title">📚 历史战绩快照</h2>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.6;">
+          这些是每次游戏重启/意外退出前自动保存的完整战绩。点一份即可打开查看；
+          「生涯」页里永远有所有局的累计记录，不受快照影响。</div>
+        <div id="snapshotList" style="max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:6px;"></div>
+        <div class="modal-actions" style="margin-top:10px;">
+          <button class="modal-close" id="snapshotCancelBtn" type="button">关闭</button>
+        </div>
+      </section>
+    </div>
+
     <!-- ===== 控制面板 ===== -->
     <div class="ctrl-panel" id="ctrlPanel">
 
@@ -1208,7 +1222,10 @@
       </div>
       <div class="modal-field">
         <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px;">程序完整路径（留空则自动在下面目录里按文件名搜索）</label>
-        <input type="text" id="launcherPathInput" placeholder="C:\...\竞拍之王全自动估价器.exe" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:13px;">
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="launcherPathInput" placeholder="C:\...\竞拍之王全自动估价器.exe" style="flex:1;min-width:0;padding:7px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:13px;">
+          <button class="modal-close" id="launcherPickBtn" type="button" style="white-space:nowrap;">📂 浏览…</button>
+        </div>
         <label style="font-size:12px;color:var(--muted);display:block;margin:6px 0 3px;">搜索目录（多个用英文逗号分隔）</label>
         <input type="text" id="launcherDirsInput" placeholder="C:\Users\用户名\Desktop" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:13px;">
         <div class="modal-actions" style="margin-top:8px;">
@@ -3105,7 +3122,71 @@
 
     document.getElementById("chooseBtn").addEventListener("click", event => {
       event.stopPropagation();
-      fileInput.click();
+      tryOpenSnapshotList();
+    });
+    // ===== 历史快照选择（2026-09-04）：「选择 JSON」升级为列表挑选，
+    // 游戏重启/意外退出后可从快照续看上次完整战绩；file:// 直开时退回本地文件选择 =====
+    function snapshotLabel(name) {
+      const m = String(name || "").match(/^result-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.json$/);
+      return m ? (+m[2]) + "月" + (+m[3]) + "日 " + m[4] + ":" + m[5] : String(name || "");
+    }
+    async function tryOpenSnapshotList() {
+      const modal = document.getElementById("snapshotModal");
+      const listEl = document.getElementById("snapshotList");
+      try {
+        const r = await fetch("/api/snapshots", { cache: "no-store" });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.ok) {
+            const snaps = d.snapshots || [];
+            if (!snaps.length) {
+              listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 2px;">还没有历史快照。当游戏重启导致战绩局数变少时，会自动在这里保存上一批完整战绩。</div>';
+            } else {
+              listEl.innerHTML = snaps.map(s => {
+                const p = Number(s.profit || 0);
+                const pc = p >= 0 ? "var(--profit-good)" : "var(--profit-bad)";
+                return '<button type="button" class="won-toggle" data-snap-name="' + s.name + '" style="text-align:left;padding:8px 10px;font-size:13px;font-weight:400;">'
+                  + '<b style="font-weight:800;">' + snapshotLabel(s.name) + '</b>'
+                  + '　' + fmt(s.games) + ' 局 · 拍下 ' + fmt(s.wins) + ' 局 · 盈亏 <span style="color:' + pc + ';font-weight:800;">' + signed(p) + '</span>'
+                  + '</button>';
+              }).join("");
+            }
+            modal.classList.add("open");
+            return;
+          }
+        }
+      } catch (e) {}
+      fileInput.click();   // 双击 HTML 直开（file://）或接口不可用：退回旧的本地选择
+    }
+    document.getElementById("snapshotList").addEventListener("click", async event => {
+      const btn = event.target.closest("[data-snap-name]");
+      if (!btn) return;
+      const name = btn.dataset.snapName;
+      try {
+        const r = await fetch("/api/snapshot?name=" + encodeURIComponent(name), { cache: "no-store" });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || "读取失败");
+        report = validateReport(d.snapshot);
+        window.__hasGames = !!(report && report.games && report.games.length);
+        if (!getSelectedUid() && report.meta && report.meta.uid) {
+          setSelectedUid(report.meta.uid);
+        }
+        clearError();
+        const label = snapshotLabel(name) + " 快照";
+        render(label);
+        document.getElementById("snapshotModal").classList.remove("open");
+        showStatus("已打开历史快照：" + label + "（点「实时刷新」回到最新战绩）");
+      } catch (error) {
+        showError("快照读取失败：" + (error.message || error));
+      }
+    });
+    document.getElementById("snapshotCancelBtn").addEventListener("click", () => {
+      document.getElementById("snapshotModal").classList.remove("open");
+    });
+    document.getElementById("snapshotModal").addEventListener("click", event => {
+      if (event.target === document.getElementById("snapshotModal")) {
+        document.getElementById("snapshotModal").classList.remove("open");
+      }
     });
     copyLanUrlBtn.addEventListener("click", event => {
       event.stopPropagation();
@@ -3285,6 +3366,7 @@
       const launcherPathInput = document.getElementById("launcherPathInput");
       const launcherDirsInput = document.getElementById("launcherDirsInput");
       const launcherSaveBtn = document.getElementById("launcherSaveBtn");
+      const launcherPickBtn = document.getElementById("launcherPickBtn");
       const launcherStartBtn = document.getElementById("launcherStartBtn");
       const launcherStatus = document.getElementById("launcherStatus");
       const launcherStateText = {
@@ -3353,8 +3435,24 @@
             : ("⚠ 未找到程序：" + (d.error || "请检查路径或搜索目录")));
         } catch (e) { setLauncherStatus("读取启动配置失败"); }
       }
-      async function refreshLauncherState() {
+      // 「浏览…」：让电脑端弹 Windows 原生文件选择框（浏览器拿不到完整本地路径，只能服务端弹），
+      // 选完自动回填并复用「保存配置」逻辑（2026-09-04 用户反馈，替代手填路径）
+      if (launcherPickBtn) launcherPickBtn.addEventListener("click", async () => {
+        setLauncherStatus("正在弹出系统文件选择框…（请在电脑上操作）");
         try {
+          const r = await withAuth(h => fetch("/api/launch/pick-file", { method: "POST", headers: h, body: "{}" }));
+          if (!r) { setLauncherStatus("未获得权限，未弹窗。"); return; }
+          const d = await r.json();
+          if (!d.ok || !d.path) {
+            setLauncherStatus(d.error === "local_only" ? "⚠ 选择文件只能在本机电脑上操作" : (d.error || "未选择文件"));
+            return;
+          }
+          if (launcherPathInput) launcherPathInput.value = d.path;
+          setLauncherStatus("已选择：" + d.path + "，正在保存…");
+          if (launcherSaveBtn) launcherSaveBtn.click();
+        } catch (e) { setLauncherStatus("弹窗失败：" + (e.message || e)); }
+      });
+      async function refreshLauncherState() {        try {
           const r = await fetch("/api/launch/status", { cache: "no-store" });
           if (!r.ok) return;
           const d = await r.json();

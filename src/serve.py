@@ -101,6 +101,9 @@ def _get_res_dir():
 RES_DIR = _get_res_dir()
 CSV = os.path.join(RES_DIR, "item_prices.csv")
 OUT = os.path.join(ROOT, "result.json")
+# 历史快照目录（2026-09-04 用户反馈）：局数变少时备份的 result-<时间戳>.json
+# 收纳进子文件夹，不再散落根目录；网页「选择 JSON」可列出并打开（续看上次战绩）
+SNAPSHOT_DIR = os.path.join(ROOT, "历史快照")
 
 # ---- 解析状态（供 /api/status 轮询）----
 STATE = {"status": "idle", "code": 0, "msg": ""}
@@ -854,7 +857,7 @@ NGROK_PORT = 8766          # 默认映射端口
 
 def init(root=None, res_dir=None):
     """设定工作根目录（result.json 与数据库等可写数据放这里）与内嵌资源目录。"""
-    global ROOT, CSV, OUT, NGROK_TOKEN_FILE, DB_PATH, CAREER_DB_DIR, CAREER_DB, RES_DIR
+    global ROOT, CSV, OUT, NGROK_TOKEN_FILE, DB_PATH, CAREER_DB_DIR, CAREER_DB, RES_DIR, SNAPSHOT_DIR
     ROOT = root or DEFAULT_HERE
     # 源码模式直接运行 serve.py 时脚本在 src/ 子目录，数据应落在项目根（src 的父目录）
     if os.path.basename(ROOT) == "src":
@@ -863,6 +866,7 @@ def init(root=None, res_dir=None):
         RES_DIR = res_dir
     CSV = os.path.join(RES_DIR, "item_prices.csv")
     OUT = os.path.join(ROOT, "result.json")
+    SNAPSHOT_DIR = os.path.join(ROOT, "历史快照")
     NGROK_TOKEN_FILE = os.path.join(ROOT, ".ngrok_token")
     DB_PATH = os.path.join(ROOT, "item_prices.db")
     CAREER_DB_DIR = os.path.join(ROOT, "生涯数据库")
@@ -1361,7 +1365,8 @@ def run_parse(uid="auto", skip_history=False):
                 with open(OUT, "r", encoding="utf-8") as _f:
                     _old = json.load(_f)
                 old_games = len(_old.get("games", []))
-                backup_path = OUT + ".warn-bak"
+                backup_path = _json_save_backup_path()
+                os.makedirs(SNAPSHOT_DIR, exist_ok=True)
                 shutil.copy2(OUT, backup_path)
             except Exception:
                 old_games = 0
@@ -2218,7 +2223,8 @@ def launcher_start():
 
 
 def _json_save_backup_path():
-    return OUT + ".warn-bak"
+    # 中间态备份也放进 历史快照/（2026-09-04），根目录不再出现 result.json.warn-bak
+    return os.path.join(SNAPSHOT_DIR, "result.json.warn-bak")
 
 def _json_save_do_save():
     """将备份的旧 result.json 另存为带时间戳文件，标记已保存。"""
@@ -2227,8 +2233,9 @@ def _json_save_do_save():
     if not os.path.isfile(bp):
         return False
     ts = time.strftime("%Y%m%d-%H%M%S")
-    dst = os.path.join(ROOT, "result-" + ts + ".json")
+    dst = os.path.join(SNAPSHOT_DIR, "result-" + ts + ".json")
     try:
+        os.makedirs(SNAPSHOT_DIR, exist_ok=True)
         shutil.move(bp, dst)
         with SAVE_WARN_LOCK:
             SAVE_WARN.update(visible=True, requires_confirmation=False,
@@ -2236,6 +2243,48 @@ def _json_save_do_save():
         return True
     except Exception:
         return False
+
+# ---- 历史快照列表/读取（2026-09-04：「选择 JSON」改造，供网页续看上次战绩）----
+_SNAPSHOT_NAME_RE = re.compile(r"^result-\d{8}-\d{6}\.json$")
+
+def _snapshots_list():
+    """列出 历史快照/ 下的战绩快照（新→旧）。名字必须严格匹配快照命名，其他文件忽略。"""
+    out = []
+    try:
+        names = os.listdir(SNAPSHOT_DIR)
+    except Exception:
+        return out
+    for n in names:
+        if not _SNAPSHOT_NAME_RE.match(n):
+            continue
+        try:
+            with open(os.path.join(SNAPSHOT_DIR, n), "r", encoding="utf-8") as f:
+                d = json.load(f)
+        except Exception:
+            continue
+        s = d.get("summary") or {}
+        out.append({
+            "name": n,
+            "generated_at": (d.get("meta") or {}).get("generated_at", ""),
+            "games": len(d.get("games", [])),
+            "wins": s.get("wins", 0),
+            "profit": s.get("profit", 0),
+        })
+    out.sort(key=lambda x: x["name"], reverse=True)
+    return out
+
+def _snapshot_read(name):
+    """按名读单个快照；名字必须严格匹配 result-YYYYMMDD-HHMMSS.json（防目录穿越）。"""
+    if not _SNAPSHOT_NAME_RE.match(str(name or "")):
+        return None
+    fp = os.path.join(SNAPSHOT_DIR, name)
+    if not os.path.isfile(fp):
+        return None
+    try:
+        with open(fp, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 def _json_save_do_discard():
     global SAVE_WARN
@@ -2325,6 +2374,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.unquote(path)   # 还原中文/特殊字符路径（修复中文路径 404）
         if path == "/" or path == "":
             path = "/bidking_report.html"
+        # 子目录一律拒绝（2026-09-04）：历史快照/ 里的 result-*.json 是私人战绩，
+        # 快照请走 /api/snapshot（带鉴权）。静态服务只服务根目录一层文件，
+        # 防止快照目录被当普通 .json 白名单成员匿名下载（旧漏洞复发）。
+        if "/" in path.lstrip("/"):
+            self.send_error(403); return
         # 静态资源优先从内嵌 RES_DIR 读取，数据文件回退到 ROOT
         fp = None
         for _base in (RES_DIR, ROOT):
@@ -2525,8 +2579,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_json({"prices": prices})
         elif p == "/api/missing-items":
             self._send_json(_get_missing_items())
-        elif p == "/api/missing-items/auto":
-            # 返回自动扫描缓存（如果 ready），清除 ready 标志
+        elif p == "/api/snapshots":
+            # 历史快照列表（2026-09-04）：走 /api/ 自动继承令牌鉴权，不走静态文件
+            self._send_json({"ok": True, "dir_name": os.path.basename(SNAPSHOT_DIR),
+                             "snapshots": _snapshots_list()})
+        elif p == "/api/snapshot":
+            qs2 = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            _snap = _snapshot_read((qs2.get("name") or [""])[0])
+            if _snap is None:
+                self._send_json({"ok": False, "error": "快照不存在或名称非法"}, code=404)
+            else:
+                self._send_json({"ok": True, "snapshot": _snap})
+        elif p == "/api/missing-items/auto":            # 返回自动扫描缓存（如果 ready），清除 ready 标志
             try:
                 with _MISSING_SCAN_LOCK:
                     ready = _MISSING_SCAN_READY
@@ -2941,6 +3005,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif p == "/api/launch":
                 # 手机只能触发启动，路径完全由 exe 端配置决定（请求体一律忽略）
                 self._send_json(launcher_start())
+            elif p == "/api/launch/pick-file":
+                # 2026-09-04 用户反馈：网页手填估价器路径太麻烦 → 点「浏览」由
+                # 后端弹 Windows 原生文件选择框（浏览器安全限制拿不到完整本地路径，
+                # 只能让服务端弹）。仅限本机：弹窗发生在服务进程里，远程触发会把
+                # 对话框弹到别人电脑上；且 pick-file 与改配置同级敏感。
+                if not _is_local_peer(self):
+                    self._send_json({"ok": False, "error": "local_only",
+                                     "msg": "选择文件只能在本机电脑上操作"}, code=403)
+                    return
+                try:
+                    if winlaunch is None:
+                        raise RuntimeError("当前环境不支持弹窗选择（winlaunch 不可用）")
+                    _allowed_name = _launcher_load_config().get("allowed_filename", "竞拍之王全自动估价器.exe")
+                    _picked = winlaunch.native_pick_exe_file(title="选择「%s」" % _allowed_name)
+                except Exception as _pe:
+                    self._send_json({"ok": False, "path": "", "error": f"弹窗失败：{_pe}"})
+                    return
+                self._send_json({"ok": bool(_picked), "path": _picked or "",
+                                 "error": "" if _picked else "未选择文件"})
             elif p == "/api/launch/config":
                 # P0-6（加固）：仅允许本机修改启动配置。远程（手机/局域网）不得改
                 # exact_path / search_dirs，否则攻击者可把搜索目录指向 UNC 或任意盘符

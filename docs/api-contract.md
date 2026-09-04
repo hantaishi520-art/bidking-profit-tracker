@@ -89,8 +89,18 @@
 | POST | /api/launch | 触发启动白名单程序（`竞拍之王全自动估价器.exe`，请求体忽略）。local/lan 放行；public 需 `allow_remote_launch` 开。已运行则置顶+点卡密弹窗 |
 | GET | /api/launch/status | `{state: idle/launching/confirming/running/exited/error, confirm_pending, confirm_detail, ...}` |
 | GET/POST | /api/launch/config | POST **仅本机**；只接受 `exact_path`（文件名必须匹配白名单）、`search_dirs`；SHA-256 哈希锁定 |
+| POST | /api/launch/pick-file | **仅本机**（local_only 403）。弹 Windows 原生文件选择框（`comdlg32.GetOpenFileNameW`，后端弹窗），返回 `{ok, path}`；取消返回 `{ok:false, path:""}`。用于「浏览…」按钮替代手填路径。**影响 App 的点**：与 config 同级敏感，远程一律 403，App 不调用 |
 
 安全保留：文件名硬白名单、路径校验（拒 UNC/可移动盘根）、哈希锁定、请求体忽略。
+
+## 六之二、历史快照（2026-09-04 新增，可续看游戏重启前的完整战绩）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | /api/snapshots | 列出 `历史快照/` 下的 `result-YYYYMMDD-HHMMSS.json`（新→旧，只认严格命名），返回 `{ok, dir_name, snapshots:[{name,generated_at,games,wins,profit}]}`。随 `/api/` 自动继承令牌鉴权 |
+| GET | /api/snapshot?name= | 按名读单个快照全文；名字必须严格匹配 `result-YYYYMMDD-HHMMSS.json`（正则过滤，防目录穿越），非法/不存在 404。返回 `{ok, snapshot}` |
+
+安全：快照目录**不进静态文件服务**（`_send_file` 拒绝含子目录的路径，403）——当年「备份 result-*.json 可匿名下载」的漏洞不再复发；快照一律走带鉴权的 `/api`。
 
 ## 七、ngrok 公网
 
@@ -118,7 +128,7 @@
 
 ## 十、变更记录（倒序）
 
-- 2026-08-31：App 回前台自动刷新修复（无 /api 接口变更，纯 App + 页面行为）：①`MainActivity.onResume()` 静默探测 200（令牌有效）时**追加软刷新当前页**（`softRefresh` → 页面 `__bkSoftRefresh` 纯拉最新 result.json / ETag 对账，零解析；3 秒防抖防与 autoSync 并发重复刷）——回前台秒级恢复最新局数，不再需要大退重开；②报表页 App 模式新增 `visibilitychange` 兜底（回前台可见时防抖 3 秒纯拉 `loadReportFromServer(true)`，仅当 `/api/status` 为 running 才轮询）——即便 App 端注入时序异常页面也能自恢复；③「实时刷新」新增**已是最新短路**（`/api/status` 为 done 且页面已有数据 → 提示「已是最新（共 N 场）」并纯拉兜底，**绝不 POST /api/refresh 触发 exe 全量重扫 5.2GB 日志**）。接口行为与参数完全不变。PC 端改 `bidking_report.html` 需重打 exe；App 端改 `MainActivity.kt` 需重打 APK，两端产物同步最终交付/。
+- 2026-09-04：新增 `/api/snapshots`（快照列表）与 `/api/snapshot`（单快照全文）+ `/api/launch/pick-file`（本机弹系统文件选择框）。受影响的点：①快照**收纳进 `历史快照/` 子文件夹**（不再散落根目录），静态文件服务拒绝含子目录路径（403），快照只能走带鉴权的 `/api`；②网页「选择 JSON」升级为快照列表弹窗（file:// 直开仍退回本地文件选择）；③远程控制弹窗新增「📂 浏览…」（仅本机可用，远程 403）。App 端纯展示改动（12 字段卡片 + 拍品/本局详情弹窗），不调新接口。PC exe 需重打；APK v1.12 (versionCode 19) 需重打。
 - 2026-08-31：PC 启动加速（无 /api 接口变更，仅启动时序与本地缓存）：launcher 改为**先起服务+开报表页、后台再跑解析**（页面秒出旧结果，`/api/status` 轮询沿用现链路）；`extract_inventory` 引入 `inventory_cache.json`（日志同目录，按 log_size+tail_offset 增量，未变零 IO / 变大扫尾部 / 变小或损坏全量重建）；`_send_json` 静默 ConnectionAbortedError/BrokenPipeError（客户端提前断开的无害噪音）。接口行为与参数均不变，App 无需改动。
 - 2026-08-31：App 端 v1.11 连接层重做（纯 App 端改动，无 /api 变更）：令牌按服务器 URL 加密持久化，回前台以 `GET /api/status`（401/403 判失效）做轻量续连探测替代重新登录；多服务器 tab 秒切；报表页注入 IndexedDB 本地缓存层 + result.json ETag 对账 + 软刷新（`window.__bkSoftRefresh`）。接口行为与参数完全不变，PC 端不随本版发布。
 - 2026-08-30：公网密码在线试错锁定（连续错 5 次→锁 15 分钟，仅 public 计数、局域网不受限；/api/auth 与 /api/pair/request 的密码校验共用，锁定期 429）；报表页「🌐 公网 IP」改名「🌐 公网访问」（该域名非公网 IP，避免误导）；App 状态栏不再回显服务器地址；PC v1.4.0 / APK v1.8 (versionCode 9)。
