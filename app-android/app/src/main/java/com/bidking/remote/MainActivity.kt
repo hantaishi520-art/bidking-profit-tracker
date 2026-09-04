@@ -1581,7 +1581,8 @@ class MainActivity : AppCompatActivity() {
            上 4 列（时间/回合/地图/赢家）+ 下 8 列（道具/拍下物品/我的出价/赢家出价/
            对手最高价/拍品价值/展示盈亏/我的盈亏）。「拍下物品」点击改纯拍品弹窗
            （与生涯一致），点卡片其它位置弹本局详情，不再内联展开。
-           颜色底色规则沿用安 12 教训（!important 显式保留）。 */
+           颜色底色规则沿用安 12 教训（!important 显式保留）。
+           安19：必须显式恢复页面 nth-child 列裁剪（截图证实卡片只剩 6 格）。 */
         const val REPORT_CARDS_JS = """
             (function(){
               try {
@@ -1594,22 +1595,41 @@ class MainActivity : AppCompatActivity() {
                   'html.app-mode .table-wrap table { min-width:0 !important; display:block !important; }',
                   'html.app-mode .table-wrap thead { display:none !important; }',
                   'html.app-mode .table-wrap tbody { display:block !important; }',
-                  'html.app-mode .table-wrap tbody tr { display:grid !important; grid-template-columns:repeat(4,1fr) !important; gap:4px 10px !important; padding:10px 12px 8px !important; margin:0 0 8px 0 !important; border:1px solid var(--line) !important; border-radius:10px !important; background:var(--panel); overflow:hidden !important; }',
+                  'html.app-mode .table-wrap tbody tr { display:grid !important; grid-template-columns:repeat(4,1fr) !important; gap:6px 10px !important; padding:10px 12px 10px !important; margin:0 0 8px 0 !important; border:1px solid var(--line) !important; border-radius:10px !important; background:var(--panel); overflow:hidden !important; }',
                   'html.app-mode .table-wrap tbody tr.win-positive { background:var(--profit-good-bg) !important; }',
                   'html.app-mode .table-wrap tbody tr.win-negative { background:var(--profit-bad-bg) !important; }',
                   'html.app-mode .table-wrap tbody td { display:block !important; padding:0 !important; border:0 !important; height:auto !important; vertical-align:top !important; text-align:left !important; }',
+                  /* 安19：页面自带 app-mode 列裁剪（bidking_report.html 的 nth-child(2/5/7/8/9/10)
+                     display:none !important，特异性 (0,3,5)）会压过上面 td{display:block}（(0,3,3)），
+                     卡片只剩 6 格——「我的出价/对手最高价」就是这么没的（2026-09-04 用户实测）。
+                     用与页面同构但多一级 tr 的选择器（(0,3,6)）显式恢复，必胜。 */
+                  'html.app-mode section.table-wrap > table tbody tr td:nth-child(2),',
+                  'html.app-mode section.table-wrap > table tbody tr td:nth-child(5),',
+                  'html.app-mode section.table-wrap > table tbody tr td:nth-child(7),',
+                  'html.app-mode section.table-wrap > table tbody tr td:nth-child(8),',
+                  'html.app-mode section.table-wrap > table tbody tr td:nth-child(9),',
+                  'html.app-mode section.table-wrap > table tbody tr td:nth-child(10) { display:block !important; }',
                   'html.app-mode .table-wrap tbody td.items { white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }',
-                  'html.app-mode .table-wrap tbody td.won-items { white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }',
+                  'html.app-mode .table-wrap tbody td.won-items { white-space:nowrap !important; overflow:visible !important; text-overflow:clip !important; }',
                   'html.app-mode .table-wrap tbody td.won-items .won-toggle { cursor:pointer; }',
+                  /* 内联拍品列表不再使用（点击走弹窗），强制隐藏防残留展开截断卡片（安14） */
+                  'html.app-mode .table-wrap tbody td.won-items .won-item-list { display:none !important; }',
                   'html.app-mode .table-wrap tbody td::before { display:block !important; color:var(--muted) !important; font-size:9px !important; line-height:1.15 !important; margin-bottom:1px !important; content:attr(data-label); }',
-                  'html.app-mode .table-wrap tbody td:nth-child(1) { font-weight:800 !important; }',
-                  'html.app-mode .table-wrap tbody td:nth-child(4) { grid-column:4; }'
+                  /* 第一行：时间加粗稍大；赢家占第 4 列并整体右对齐（与生涯卡片观感一致） */
+                  'html.app-mode .table-wrap tbody td:nth-child(1) { font-weight:800 !important; font-size:13px !important; line-height:1.2 !important; }',
+                  'html.app-mode .table-wrap tbody td:nth-child(4) { grid-column:4; text-align:right !important; }',
+                  'html.app-mode .table-wrap tbody td:nth-child(4)::before { text-align:right !important; }',
+                  /* 第二行数字字段（道具为文字除外）加粗稍大，盈亏色由 profit-pos/neg 控制 */
+                  'html.app-mode .table-wrap tbody td:nth-child(6),',
+                  'html.app-mode .table-wrap tbody td:nth-child(n+7) { font-weight:800 !important; font-size:13px !important; line-height:1.2 !important; }'
                 ].join('');
                 document.head.appendChild(st);
                 /* 报表页卡片点击分流（2026-09-04 用户反馈，对齐生涯页交互）：
                    点「拍下物品」格（含 展开/收起 按钮）→ 纯拍品弹窗（生涯页同款）；
                    点卡片其余任意位置 → 本局详情弹窗（12 字段 + 拍品）。
-                   capture 阶段拦截，页面自身的内联展开不再触发。 */
+                   capture 阶段拦截，页面自身的内联展开不再触发。
+                   注： won-list 元素可能因此前点击已展开，分流后属残留 DOM，
+                   打开弹窗前统一 hidden 掉，避免卡片下方露出半截列表。 */
                 document.addEventListener('click', function(e){
                   var wonTd = e.target.closest('td.won-items');
                   var tr = (wonTd ? wonTd : e.target.closest('#tableBody tr'));
@@ -1619,6 +1639,9 @@ class MainActivity : AppCompatActivity() {
                   if (wonTd) {
                     if (!g.won_items || !g.won_items.length) return;
                     e.stopPropagation(); e.preventDefault();
+                    tr.querySelectorAll('.won-item-list').forEach(function(el){ el.hidden = true; });
+                    var tg = tr.querySelector('.won-toggle');
+                    if (tg) { tg.setAttribute('aria-expanded','false'); tg.textContent = '展开'; }
                     if (window.__bkWonModal) window.__bkWonModal.open(g);
                   } else if (e.target.closest('button, a, input, select')) {
                     return;   // 卡片内的其它按钮（若有）保持页面自身行为
