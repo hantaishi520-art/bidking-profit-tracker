@@ -1633,18 +1633,20 @@ class MainActivity : AppCompatActivity() {
                 if (!window.__bkReportTapSplit) {
                   window.__bkReportTapSplit = 1;
                   function bkEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-                  function bkNum(s){ return String(s==null?'':s).replace(/,/g,'').replace(/[+\-]/g,''); }
                   function ensureWonModal(){
                     var m = document.getElementById('__bkWonModal');
                     if (m) return m;
                     var st = document.createElement('style');
                     st.id = '__bkWonModalStyle';
+                    /* 照抄 bidking_career.html 的 .won-modal-backdrop/.won-modal 全套样式
+                       （2026-09-04 用户要求：与生涯页「N 件 ▸」弹窗同款，逐值照抄） */
                     st.textContent = [
-                      '#__bkWonModal{position:fixed;inset:0;background:rgba(20,16,10,.45);display:none;align-items:center;justify-content:center;z-index:60;}',
-                      '#__bkWonModal .wk-modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:min(92vw,440px);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3);}',
-                      '#__bkWonModal .wk-head{display:flex;justify-content:space-between;align-items:center;font-weight:900;margin-bottom:10px;gap:12px;}',
-                      '#__bkWonModal .wk-close{min-height:30px;padding:2px 10px;background:#888;color:#fff;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-weight:800;}',
-                      '#__bkWonModal .wk-body{overflow:auto;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;}',
+                      '#__bkWonModal{position:fixed;inset:0;background:rgba(20,16,10,.45);display:flex;align-items:center;justify-content:center;z-index:50;}',
+                      '#__bkWonModal[hidden]{display:none;}',
+                      '#__bkWonModal .won-modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:min(92vw,440px);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3);}',
+                      '#__bkWonModal .won-modal-head{display:flex;justify-content:space-between;align-items:center;font-weight:900;margin-bottom:10px;gap:12px;}',
+                      '#__bkWonModal .won-modal-close{min-height:30px;padding:2px 10px;background:#888;color:#fff;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-weight:800;}',
+                      '#__bkWonModal .won-modal-body{overflow:auto;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;}',
                       '#__bkWonModal .won-item{display:inline-flex;align-items:center;gap:5px;margin:2px 4px 2px 0;padding:3px 7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-weight:800;font-size:12px;}',
                       '#__bkWonModal .won-item-value{color:var(--accent);}',
                       '#__bkWonModal .won-item-quality{color:var(--muted);font-weight:700;}'
@@ -1652,21 +1654,22 @@ class MainActivity : AppCompatActivity() {
                     document.head.appendChild(st);
                     m = document.createElement('div');
                     m.id = '__bkWonModal';
-                    m.innerHTML = '<div class="wk-modal"><div class="wk-head"><span></span><button class="wk-close" type="button" aria-label="关闭">✕</button></div><div class="wk-body"></div></div>';
-                    m.addEventListener('click', function(e){ if (e.target === m || e.target.closest('.wk-close')) m.style.display='none'; });
+                    m.hidden = true;
+                    m.innerHTML = '<div class="won-modal"><div class="won-modal-head"><span></span><button class="won-modal-close" type="button" aria-label="关闭">✕</button></div><div class="won-modal-body"></div></div>';
+                    m.addEventListener('click', function(e){ if (e.target === m || e.target.closest('.won-modal-close')) m.hidden = true; });
                     document.body.appendChild(m);
                     return m;
                   }
                   function openWonInline(g){
                     var m = ensureWonModal();
-                    m.querySelector('.wk-head span').textContent = (g.time||'') + (g.map_name ? ' · ' + g.map_name : '');
+                    m.querySelector('.won-modal-head span').textContent = (g.time||'') + (g.map_name ? ' · ' + g.map_name : '');
                     var items = (g.won_items || []).slice().sort(function(a,b){ return Number(b.value||0)-Number(a.value||0); });
                     var list = items.map(function(it){
                       var q = it.quality ? '<span class="won-item-quality">Q'+bkEsc(it.quality)+'</span>' : '';
-                      return '<span class="won-item" title="CID '+bkEsc(it.cid||'')+'">'+bkEsc(it.name||'?')+' '+q+'<span class="won-item-value">'+bkNum(it.value)+'</span></span>';
+                      return '<span class="won-item" title="CID '+bkEsc(it.cid||'')+'">'+bkEsc(it.name||'?')+' '+q+'<span class="won-item-value">'+bkEsc(it.value)+'</span></span>';
                     }).join('');
-                    m.querySelector('.wk-body').innerHTML = list || '<div style="color:var(--muted);font-size:13px;">本局未拍下物品</div>';
-                    m.style.display = 'flex';
+                    m.querySelector('.won-modal-body').innerHTML = list || '<div style="color:var(--muted);font-size:13px;">本局未拍下物品</div>';
+                    m.hidden = false;
                   }
                   window.__bkOpenWonInline = openWonInline;   // 生涯页也可复用
                   /* collectRow 自包含副本（2026-09-04 v4）：此前依赖 GAME_MODAL_JS 里的
@@ -1693,7 +1696,7 @@ class MainActivity : AppCompatActivity() {
                   }
                   document.addEventListener('click', function(e){
                     var wonTd = e.target.closest('td.won-items');
-                    var tr = (wonTd ? wonTd : e.target.closest('#tableBody tr'));
+                    var tr = (wonTd ? wonTd.closest('tr') : e.target.closest('#tableBody tr'));
                     if (!tr || !tr.querySelector('td')) return;
                     var g = bkCollectRow(tr);
                     if (!g) return;
