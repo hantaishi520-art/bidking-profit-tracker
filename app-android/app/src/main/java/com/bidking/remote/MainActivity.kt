@@ -1515,6 +1515,43 @@ class MainActivity : AppCompatActivity() {
                 }
                 window.__bkGameModal = { open: openGameModal };
 
+                /* 纯拍品弹窗（2026-09-04 用户反馈）：与生涯页「N 件 ▸」弹窗同款——
+                   只有标题 + 拍品 chips，不带 12 字段。报表页点「拍下物品/展开」用，
+                   点卡片其他区域才弹上面的本局详情（对齐生涯页「点行=详情、点件数=拍品」）。 */
+                function openWonModal(g){
+                  if (!g) return;
+                  var m = document.getElementById('__bkWonModal');
+                  if (!m) {
+                    var st = document.createElement('style');
+                    st.id = '__bkWonModalStyle';
+                    st.textContent = [
+                      '#__bkWonModal{position:fixed;inset:0;background:rgba(20,16,10,.45);display:none;align-items:center;justify-content:center;z-index:60;}',
+                      '#__bkWonModal .wk-modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:min(92vw,440px);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3);}',
+                      '#__bkWonModal .wk-head{display:flex;justify-content:space-between;align-items:center;font-weight:900;margin-bottom:10px;gap:12px;}',
+                      '#__bkWonModal .wk-close{min-height:30px;padding:2px 10px;background:#888;color:#fff;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-weight:800;}',
+                      '#__bkWonModal .wk-body{overflow:auto;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;}',
+                      '#__bkWonModal .won-item{display:inline-flex;align-items:center;gap:5px;margin:2px 4px 2px 0;padding:3px 7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-weight:800;font-size:12px;}',
+                      '#__bkWonModal .won-item-value{color:var(--accent);}',
+                      '#__bkWonModal .won-item-quality{color:var(--muted);font-weight:700;}'
+                    ].join('');
+                    document.head.appendChild(st);
+                    m = document.createElement('div');
+                    m.id = '__bkWonModal';
+                    m.innerHTML = '<div class="wk-modal"><div class="wk-head"><span></span><button class="wk-close" type="button" aria-label="关闭">✕</button></div><div class="wk-body"></div></div>';
+                    m.addEventListener('click', function(e){ if (e.target === m || e.target.closest('.wk-close')) m.style.display='none'; });
+                    document.body.appendChild(m);
+                  }
+                  m.querySelector('.wk-head span').textContent = (g.time||'') + (g.map_name ? ' · ' + g.map_name : '');
+                  var items = (g.won_items || []).slice().sort(function(a,b){ return Number(b.value||0)-Number(a.value||0); });
+                  var list = items.map(function(it){
+                    var q = it.quality ? '<span class="won-item-quality">Q'+esc(it.quality)+'</span>' : '';
+                    return '<span class="won-item" title="CID '+esc(it.cid||'')+'">'+esc(it.name||'?')+' '+q+'<span class="won-item-value">'+fmtNum(it.value)+'</span></span>';
+                  }).join('');
+                  m.querySelector('.wk-body').innerHTML = list || '<div style="color:var(--muted);font-size:13px;">本局未拍下物品</div>';
+                  m.style.display = 'flex';
+                }
+                window.__bkWonModal = { open: openWonModal };
+
                 /* 从表格行收集本局数据：报表页/生涯页都是 12 列同构：
                    时间/回合/地图/赢家/道具/拍下物品/我的出价/赢家出价/对手最高价/拍品价值/展示盈亏/我的盈亏 */
                 function collectRow(tr){
@@ -1542,8 +1579,9 @@ class MainActivity : AppCompatActivity() {
 
         /* 报表页战绩卡片（2026-09-04 重做，取代 3×2）：12 字段全展示的加长卡片，
            上 4 列（时间/回合/地图/赢家）+ 下 8 列（道具/拍下物品/我的出价/赢家出价/
-           对手最高价/拍品价值/展示盈亏/我的盈亏）。「拍下物品」点击改弹窗（与生涯一致），
-           不再展开内联列表。颜色底色规则沿用安 12 教训（!important 显式保留）。 */
+           对手最高价/拍品价值/展示盈亏/我的盈亏）。「拍下物品」点击改纯拍品弹窗
+           （与生涯一致），点卡片其它位置弹本局详情，不再内联展开。
+           颜色底色规则沿用安 12 教训（!important 显式保留）。 */
         const val REPORT_CARDS_JS = """
             (function(){
               try {
@@ -1568,18 +1606,26 @@ class MainActivity : AppCompatActivity() {
                   'html.app-mode .table-wrap tbody td:nth-child(4) { grid-column:4; }'
                 ].join('');
                 document.head.appendChild(st);
-                // 「拍下物品」点击 → 弹窗（capture 阶段优先于页面 bubble 的展开/收起）；
-                // 未拍下（--）不弹。与生涯页一致，2026-09-04 用户反馈。
+                /* 报表页卡片点击分流（2026-09-04 用户反馈，对齐生涯页交互）：
+                   点「拍下物品」格（含 展开/收起 按钮）→ 纯拍品弹窗（生涯页同款）；
+                   点卡片其余任意位置 → 本局详情弹窗（12 字段 + 拍品）。
+                   capture 阶段拦截，页面自身的内联展开不再触发。 */
                 document.addEventListener('click', function(e){
-                  var td = e.target.closest('td.won-items');
-                  if (!td) return;
-                  var tr = td.closest('tr');
-                  if (!tr) return;
+                  var wonTd = e.target.closest('td.won-items');
+                  var tr = (wonTd ? wonTd : e.target.closest('#tableBody tr'));
+                  if (!tr || !tr.querySelector('td')) return;
                   var g = window.__bkCollectRow ? window.__bkCollectRow(tr) : null;
-                  if (!g || !g.won_items || !g.won_items.length) return;
-                  e.stopPropagation();
-                  e.preventDefault();
-                  if (window.__bkGameModal) window.__bkGameModal.open(g);
+                  if (!g) return;
+                  if (wonTd) {
+                    if (!g.won_items || !g.won_items.length) return;
+                    e.stopPropagation(); e.preventDefault();
+                    if (window.__bkWonModal) window.__bkWonModal.open(g);
+                  } else if (e.target.closest('button, a, input, select')) {
+                    return;   // 卡片内的其它按钮（若有）保持页面自身行为
+                  } else {
+                    e.stopPropagation(); e.preventDefault();
+                    if (window.__bkGameModal) window.__bkGameModal.open(g);
+                  }
                 }, true);
               } catch (e) {}
             })();
