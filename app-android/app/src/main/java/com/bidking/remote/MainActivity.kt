@@ -33,6 +33,11 @@ import android.widget.TextView
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import kotlin.concurrent.thread
@@ -207,6 +212,7 @@ class MainActivity : AppCompatActivity() {
 
     // 底部弹层
     private lateinit var sheet: LinearLayout
+    private lateinit var mid: LinearLayout   // 顶栏容器（insets 监听器要给它加状态栏 padding，2026-09-04）
     private lateinit var sheetTitle: TextView
     private lateinit var sheetNameInput: EditText
     private lateinit var sheetUrlInput: EditText
@@ -275,7 +281,7 @@ class MainActivity : AppCompatActivity() {
         rootView = FrameLayout(this).apply { setBackgroundColor(if (darkMode) 0xFF12171F.toInt() else 0xFFF4F1EA.toInt()) }
 
         // 中部容器：标题栏 + WebView 占满
-        val mid = LinearLayout(this).apply {
+        mid = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(10), dp(14), 0)
         }
@@ -408,8 +414,28 @@ class MainActivity : AppCompatActivity() {
         buildSheet(rootView)
 
         setContentView(rootView)
+        applySystemBarInsets()
         renderBottomBar()
         syncWebHostBottomPadding()
+    }
+
+    /* 安15（targetSdk 35）强制「边到边」：App 内容画进状态栏底下，顶栏文字与
+       系统时间/电量重叠（用户截图反馈）。修法：动态读系统栏 insets，给顶栏让出
+       等高 padding——各机型状态栏高度不同（24~48dp），不能写死，必须监听读取。
+       同时给底部栏让出导航条高度，手势机型上不被小白条压住。 */
+    private fun applySystemBarInsets() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            // 顶栏容器（mid）顶部让出状态栏高度；左右让出挖孔/刘海
+            mid.setPadding(dp(14), bars.top + dp(10), dp(14), 0)
+            // 底部栏垫高：内容不被手势条遮挡（导航栏隐藏时 bottomInset 为 0，无副作用）
+            bottomBar.setPadding(dp(8), dp(4), dp(8), dp(8) + bars.bottom)
+            // 弹层同享底部安全距离（输入框不被手势条压住）；基础值保持原 (18,14,18,18)
+            sheet.setPadding(dp(18), dp(14), dp(18), dp(18) + bars.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
     }
 
     // 让 WebView 内容底部让出底部导航栏高度，避免最底数据被遮住
@@ -2354,6 +2380,13 @@ class MainActivity : AppCompatActivity() {
         try {
             window.statusBarColor = bg
             window.navigationBarColor = panel
+        } catch (_: Exception) {}
+        // 状态栏图标深浅跟随主题（2026-09-04）：亮色主题下系统时间/电量用深色图标，
+        // 否则白图标画在浅色顶栏上看不见（与「重叠」一起被用户反馈）
+        try {
+            val c = WindowInsetsControllerCompat(window, rootView)
+            c.isAppearanceLightStatusBars = !darkMode
+            c.isAppearanceLightNavigationBars = !darkMode
         } catch (_: Exception) {}
 
         // 弹层输入框文字深色适配（原来固定黑/灰，深色下看不清）
