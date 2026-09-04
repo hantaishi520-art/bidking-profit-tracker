@@ -8,6 +8,10 @@
     /* App 模式（?app=1）：隐藏电脑端专属操作（导入/数据库管理/扫描日志），保留查看 */
     html.app-mode .app-hide-import { display:none !important; }
     html.app-mode .app-hide-scan { display:none !important; }
+    /* 2026-09-03：生涯页「扫描缺失拍品」与「我添加的拍品」两块对使用者均无闭环（日志协议只带 cid 无法补录；
+       补录走挖表流程；自定义物品管理在报表页「物品价格配置」）。统一无条件隐藏，代码与接口全保留；
+       要恢复就把下面这行删掉。 */
+    .app-hide-scan { display:none !important; }
     html.app-mode #careerDbPanel { display:none !important; }
     /* App 模式：返回按钮显示，电脑模式隐藏 */
     html.app-mode #careerBackBtn { display:inline-block; }
@@ -179,6 +183,7 @@
     </section>
 
     <section class="panel app-hide-scan">
+      <div id="missingScanBlock">
       <h2>扫描日志找缺失拍品</h2>
       <div class="toolbar" style="box-shadow:none;margin:0 0 10px;padding:0;border:0">
         <div class="sub" style="flex:1">扫描 <code>Player.log</code>，找出「日志里出现过、但物品表尚未收录」的新拍品。仅扫描尚未扫描过的场次（已扫描的不重复扫描），填好名称与价格后点「加入列表」会自动重新统计。</div>
@@ -193,6 +198,7 @@
           <tbody id="missingTableBody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">点上方「扫描日志」开始</td></tr></tbody>
         </table>
       </div>
+      </div><!-- /missingScanBlock -->
 
       <h3 style="margin:18px 0 8px">我添加的拍品（可删除）</h3>
       <div class="table-scroll" style="max-height:300px">
