@@ -1411,15 +1411,18 @@ class MainActivity : AppCompatActivity() {
         val url = pageUrl ?: return
         // 通用：给所有动态生成的表格补列名标签，避免卡片化后只剩裸数字
         wv?.evaluateJavascript(AppEnhance.TABLE_LABEL_JS, null)
-        // 报表页：收益/拍品价值/银币 三合一切换 + 统计卡紧凑 + 回到顶部悬浮按钮
+        // 公共：本局详情/拍下物品弹窗（报表页与生涯页共用，先注入以便行点击捕获）
+        wv?.evaluateJavascript(AppEnhance.GAME_MODAL_JS, null)
+        // 报表页：收益/拍品价值/银币 三合一切换 + 12 字段加长卡片 + 拍品点击弹窗 + 回到顶部悬浮按钮
         if (url.contains("bidking_report.html")) {
             wv?.evaluateJavascript(AppEnhance.REPORT_ENHANCE_JS, null)
             wv?.evaluateJavascript(AppEnhance.REPORT_CARDS_JS, null)
             wv?.evaluateJavascript(AppEnhance.FAB_JS, null)
         }
-        // 生涯页：各地图大类/24h/高价值 三合一切换 + 「前往该局」卡死修复 + 回到顶部悬浮按钮
+        // 生涯页：各地图大类/24h/高价值 三合一切换 + 点行弹本局详情 + 「前往该局」卡死修复 + 回到顶部悬浮按钮
         else if (url.contains("bidking_career.html")) {
             wv?.evaluateJavascript(AppEnhance.CAREER_ENHANCE_JS, null)
+            wv?.evaluateJavascript(AppEnhance.CAREER_ROW_MODAL_JS, null)
             wv?.evaluateJavascript(AppEnhance.CAREER_JUMP_PATCH_JS, null)
             wv?.evaluateJavascript(AppEnhance.FAB_JS, null)
         }
@@ -1431,10 +1434,90 @@ class MainActivity : AppCompatActivity() {
     }
 
     private object AppEnhance {
-        /* 主页详细对局卡片化（2026-08-30 用户要求）：3×2 字段卡
-           时间/地图/赢家 | 拍下物品/展示盈亏/我的盈亏（赢家列回归）。
-           ⚠️ 安12 教训：卡片底色不带 !important，拿仓 win-positive/win-negative
-           的配色底色用更高优先级 !important 规则显式保留（页面 var 为 v1.4.2 的 20%）。 */
+        /* 本局详情 / 拍下物品 弹窗（2026-09-04 用户反馈：主页与生涯都要弹窗显示拍品；
+           「加长战绩卡片」后 12 字段直接铺在卡片上，弹窗用于看拍品明细与生涯点行看全量）。
+           报表页与生涯页共用，先于各页增强注入。 */
+
+        const val GAME_MODAL_JS = """
+            (function(){
+              try {
+                if (window.__bkGameModal) return;
+                function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+                function fmtNum(s){ return String(s==null?'':s).replace(/,/g,'').replace(/[+\-]/g,''); }
+                function openGameModal(g){
+                  if (!g) return;
+                  var fields = [
+                    ['时间', g.time||'--'], ['回合', g.rounds||'--'], ['地图', g.map_name||'--'], ['赢家', g.winner||'--'],
+                    ['道具', g.items_text||'--'], ['拍下物品', g.won_text||'--'],
+                    ['我的出价', g.final_bid||'--'], ['赢家出价', g.winner_final_bid||'--'],
+                    ['对手最高价', g.opponent_bid||'--'], ['拍品价值', g.actual_value||'--'],
+                    ['展示盈亏', g.disp_profit||'--'], ['我的盈亏', g.my_profit||'--']
+                  ];
+                  var body = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-bottom:10px;">' + fields.map(function(f){
+                    return '<div><div style="color:var(--muted);font-size:10px;line-height:1.2;">'+esc(f[0])+'</div><div style="font-weight:800;font-size:13px;word-break:break-all;">'+esc(f[1])+'</div></div>';
+                  }).join('') + '</div>';
+                  var items = (g.won_items || []).slice().sort(function(a,b){ return Number(b.value||0)-Number(a.value||0); });
+                  var list = items.map(function(it){
+                    var q = it.quality ? '<span class="won-item-quality">Q'+esc(it.quality)+'</span>' : '';
+                    return '<span class="won-item" title="CID '+esc(it.cid||'')+'">'+esc(it.name||'?')+' '+q+'<span class="won-item-value">'+fmtNum(it.value)+'</span></span>';
+                  }).join('');
+                  var m = document.getElementById('__bkGameModal');
+                  if (!m) {
+                    var st = document.createElement('style');
+                    st.id = '__bkGameModalStyle';
+                    st.textContent = [
+                      '#__bkGameModal{position:fixed;inset:0;background:rgba(20,16,10,.45);display:none;align-items:center;justify-content:center;z-index:60;}',
+                      '#__bkGameModal .bk-modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;width:min(92vw,440px);max-height:84vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3);}',
+                      '#__bkGameModal .bk-head{display:flex;justify-content:space-between;align-items:center;font-weight:800;margin-bottom:10px;gap:12px;}',
+                      '#__bkGameModal .bk-close{min-height:30px;padding:2px 10px;background:#888;color:#fff;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-weight:800;}',
+                      '#__bkGameModal .bk-body{overflow:auto;display:flex;flex-direction:column;gap:8px;min-height:0;}',
+                      '#__bkGameModal .won-item{display:inline-flex;align-items:center;gap:5px;margin:2px 4px 2px 0;padding:3px 7px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-weight:800;font-size:12px;}',
+                      '#__bkGameModal .won-item-value{color:var(--accent);}',
+                      '#__bkGameModal .won-item-quality{color:var(--muted);font-weight:700;}'
+                    ].join('');
+                    document.head.appendChild(st);
+                    m = document.createElement('div');
+                    m.id = '__bkGameModal';
+                    m.innerHTML = '<div class="bk-modal"><div class="bk-head"><span></span><button class="bk-close" type="button" aria-label="关闭">✕</button></div><div class="bk-body"></div></div>';
+                    m.addEventListener('click', function(e){ if (e.target === m || e.target.closest('.bk-close')) m.style.display='none'; });
+                    document.body.appendChild(m);
+                  }
+                  m.querySelector('.bk-head span').textContent = (g.time||'') + (g.map_name ? ' · ' + g.map_name : '');
+                  var b = m.querySelector('.bk-body');
+                  b.innerHTML = body + '<div><div style="color:var(--muted);font-size:10px;line-height:1.2;margin-bottom:4px;">拍下物品</div><div style="display:flex;flex-wrap:wrap;">' + (list || '<div style="color:var(--muted);font-size:13px;">本局未拍下物品</div>') + '</div></div>';
+                  m.style.display = 'flex';
+                }
+                window.__bkGameModal = { open: openGameModal };
+
+                /* 从表格行收集本局数据：报表页/生涯页都是 12 列同构：
+                   时间/回合/地图/赢家/道具/拍下物品/我的出价/赢家出价/对手最高价/拍品价值/展示盈亏/我的盈亏 */
+                function collectRow(tr){
+                  var tds = tr.querySelectorAll('td');
+                  if (!tds || tds.length < 12) return null;
+                  var itemsText = tds[4].getAttribute('title') || tds[4].textContent.trim();
+                  var won = Array.from(tr.querySelectorAll('td:nth-child(6) .won-item')).map(function(el){
+                    var q = el.querySelector('.won-item-quality');
+                    var v = el.querySelector('.won-item-value');
+                    return { name: (el.childNodes[0] ? el.childNodes[0].textContent.trim() : ''), quality: q ? q.textContent.replace('Q','').trim() : '', value: v ? v.textContent.trim() : '' };
+                  });
+                  var t = function(i){ return tds[i].textContent.trim(); };
+                  return {
+                    time: t(0), rounds: t(1), map_name: t(2), winner: t(3),
+                    items_text: itemsText, won_text: t(5),
+                    final_bid: t(6), winner_final_bid: t(7), opponent_bid: t(8),
+                    actual_value: t(9), disp_profit: t(10), my_profit: t(11),
+                    won_items: won
+                  };
+                }
+                window.__bkCollectRow = collectRow;
+              } catch(e) {}
+            })();
+        """
+
+        /* 报表页战绩卡片（2026-09-04 重做，取代 3×2）：12 字段全展示的加长卡片，
+           上 4 列（时间/回合/地图/赢家）+ 下 8 列（道具/拍下物品/我的出价/赢家出价/
+           对手最高价/拍品价值/展示盈亏/我的盈亏）。「拍下物品」点击改弹窗（与生涯一致），
+           不再展开内联列表。颜色底色规则沿用安 12 教训（!important 显式保留）。 */
         const val REPORT_CARDS_JS = """
             (function(){
               try {
@@ -1447,21 +1530,52 @@ class MainActivity : AppCompatActivity() {
                   'html.app-mode .table-wrap table { min-width:0 !important; display:block !important; }',
                   'html.app-mode .table-wrap thead { display:none !important; }',
                   'html.app-mode .table-wrap tbody { display:block !important; }',
-                  'html.app-mode .table-wrap tbody tr { display:grid !important; grid-template-columns:repeat(3,1fr) !important; gap:1px 10px !important; padding:9px 12px 7px !important; margin:0 0 8px 0 !important; border:1px solid var(--line) !important; border-radius:10px !important; background:var(--panel); overflow:hidden !important; }',
+                  'html.app-mode .table-wrap tbody tr { display:grid !important; grid-template-columns:repeat(4,1fr) !important; gap:4px 10px !important; padding:10px 12px 8px !important; margin:0 0 8px 0 !important; border:1px solid var(--line) !important; border-radius:10px !important; background:var(--panel); overflow:hidden !important; }',
                   'html.app-mode .table-wrap tbody tr.win-positive { background:var(--profit-good-bg) !important; }',
                   'html.app-mode .table-wrap tbody tr.win-negative { background:var(--profit-bad-bg) !important; }',
-                  'html.app-mode .table-wrap tbody td { display:block !important; padding:0 !important; border:0 !important; height:auto !important; vertical-align:top !important; text-align:left !important; white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }',
-                  'html.app-mode .table-wrap tbody td.won-items { white-space:normal !important; }',
-                  'html.app-mode .table-wrap tbody td::before { display:block !important; color:var(--muted) !important; font-size:9px !important; line-height:1.15 !important; content:attr(data-label); }',
-                  'html.app-mode .table-wrap tbody td:nth-child(2),',
-                  'html.app-mode .table-wrap tbody td:nth-child(5),',
-                  'html.app-mode .table-wrap tbody td:nth-child(7),',
-                  'html.app-mode .table-wrap tbody td:nth-child(8),',
-                  'html.app-mode .table-wrap tbody td:nth-child(9),',
-                  'html.app-mode .table-wrap tbody td:nth-child(10) { display:none !important; }'
+                  'html.app-mode .table-wrap tbody td { display:block !important; padding:0 !important; border:0 !important; height:auto !important; vertical-align:top !important; text-align:left !important; }',
+                  'html.app-mode .table-wrap tbody td.items { white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }',
+                  'html.app-mode .table-wrap tbody td.won-items { white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }',
+                  'html.app-mode .table-wrap tbody td.won-items .won-toggle { cursor:pointer; }',
+                  'html.app-mode .table-wrap tbody td::before { display:block !important; color:var(--muted) !important; font-size:9px !important; line-height:1.15 !important; margin-bottom:1px !important; content:attr(data-label); }',
+                  'html.app-mode .table-wrap tbody td:nth-child(1) { font-weight:800 !important; }',
+                  'html.app-mode .table-wrap tbody td:nth-child(4) { grid-column:4; }'
                 ].join('');
                 document.head.appendChild(st);
+                // 「拍下物品」点击 → 弹窗（capture 阶段优先于页面 bubble 的展开/收起）；
+                // 未拍下（--）不弹。与生涯页一致，2026-09-04 用户反馈。
+                document.addEventListener('click', function(e){
+                  var td = e.target.closest('td.won-items');
+                  if (!td) return;
+                  var tr = td.closest('tr');
+                  if (!tr) return;
+                  var g = window.__bkCollectRow ? window.__bkCollectRow(tr) : null;
+                  if (!g || !g.won_items || !g.won_items.length) return;
+                  e.stopPropagation();
+                  e.preventDefault();
+                  if (window.__bkGameModal) window.__bkGameModal.open(g);
+                }, true);
               } catch (e) {}
+            })();
+        """
+
+        /* 生涯页点行弹本局详情（2026-09-04 用户反馈）：生涯页在手机上横向滚动看不清，
+           点任意行（避开「拍下物品」弹窗按钮/「前往」按钮）弹出与报表页相同的本局详情。 */
+        const val CAREER_ROW_MODAL_JS = """
+            (function(){
+              try {
+                if (window.__bkCareerRowModal) return;
+                document.addEventListener('click', function(e){
+                  var ignore = e.target.closest('button, a, input, select, .won-toggle');
+                  if (ignore) return;
+                  var tr = e.target.closest('#careerTableBody tr, #career-table-body tr');
+                  if (!tr) return;
+                  var g = window.__bkCollectRow ? window.__bkCollectRow(tr) : null;
+                  if (!g) return;
+                  if (window.__bkGameModal) window.__bkGameModal.open(g);
+                }, true);
+                window.__bkCareerRowModal = 1;
+              } catch(e) {}
             })();
         """
 
